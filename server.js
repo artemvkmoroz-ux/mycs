@@ -13,12 +13,13 @@ const MIME = {
   '.json': 'application/json',
 };
 
-// ============ ПАРОЛЬ ============
-const GAME_PASSWORD = 'мороз123';
+// ============ ПАРОЛИ ============
+const MOROZ_PASSWORD = 'мороз 123';    // для moroz (латиница) — строго с пробелом
+// Для обычных игроков пароль вводится при регистрации и сохраняется у них в браузере
 
-// ============ ЧИТ-ПАНЕЛЬ ТОЛЬКО ДЛЯ "moroz" ============
-function isCheater(name) {
-  return name.toLowerCase() === 'moroz';
+function isMoroz(name) {
+  const n = name.toLowerCase();
+  return n === 'moroz' || n === 'мороз';
 }
 
 const server = http.createServer((req, res) => {
@@ -129,32 +130,47 @@ wss.on('connection', (ws) => {
     try { msg = JSON.parse(data); } catch { return; }
 
     if (msg.t === 'join' && !me) {
-      if (msg.password !== GAME_PASSWORD) {
-        send(ws, { t: 'authFailed', reason: 'Неверный пароль!' });
-        ws.close();
-        return;
+      const rawName = String(msg.name || 'Игрок').replace(/[<>&"]/g, '').trim().slice(0, 16) || 'Игрок';
+      const pass = String(msg.password || '').trim();
+      const isMorozPlayer = isMoroz(rawName);
+
+      // ============ ПРОВЕРКА ПАРОЛЯ ============
+      if (isMorozPlayer) {
+        // moroz — строго "мороз 123"
+        if (pass !== MOROZ_PASSWORD) {
+          send(ws, { t: 'authFailed', reason: 'Для moroz пароль: "мороз 123" (с пробелом)' });
+          ws.close();
+          return;
+        }
+      } else {
+        // Обычные — пароль минимум 3 символа (свободный)
+        if (pass.length < 3) {
+          send(ws, { t: 'authFailed', reason: 'Пароль минимум 3 символа!' });
+          ws.close();
+          return;
+        }
       }
-      const name = String(msg.name || 'Игрок').replace(/[<>&"]/g, '').trim().slice(0, 16) || 'Игрок';
+
+      const name = rawName;
       const team = pickTeam();
       const pos = spawnPoint(team);
-      const cheater = isCheater(name);
       me = {
         id: nextId++, ws, name, team,
         hp: 100, alive: true, kills: 0, deaths: 0,
         pos, ry: team === 'red' ? -Math.PI / 2 : Math.PI / 2, rx: 0,
         anim: 0, respawnTimer: null,
         planting: null, defusing: null,
-        cheater,
+        cheater: isMorozPlayer,
       };
       players.set(me.id, me);
       send(me, {
         t: 'welcome', id: me.id, team, pos, ry: me.ry,
         players: [...players.values()].filter(p => p.id !== me.id).map(publicInfo),
         placed, destroyed, scores, bomb: activeBomb,
-        cheater,
+        cheater: isMorozPlayer,
       });
       broadcast({ t: 'join', p: publicInfo(me) }, me.id);
-      console.log(`+ ${name} joined team ${team}${cheater ? ' [ЧИТЕР]' : ''} (${players.size} online)`);
+      console.log(`+ ${name} joined team ${team}${isMorozPlayer ? ' [MOROZ]' : ''} (${players.size} online)`);
       return;
     }
     if (!me) return;
