@@ -12,10 +12,8 @@ const WEAPONS = {
   rifle:   { name: 'АВТОМАТ',  dmg: 18, rate: 110,  mag: 30, reload: 1800, spread: 0.014, auto: true,  pellets: 1, range: 90 },
   shotgun: { name: 'ДРОБОВИК', dmg: 9,  rate: 850,  mag: 6,  reload: 2200, spread: 0.06,  auto: false, pellets: 8, range: 32 },
   sniper:  { name: 'ВИНТОВКА', dmg: 70, rate: 1400, mag: 5,  reload: 2400, spread: 0.002, auto: false, pellets: 1, range: 140 },
-  blocks:  { name: 'БЛОКИ',    builder: true },
-  pickaxe: { name: 'КИРКА',    tool: true, auto: true },
 };
-const SLOTS = ['rifle', 'shotgun', 'sniper', 'blocks', 'pickaxe'];
+const SLOTS = ['rifle', 'shotgun', 'sniper'];
 const TEAM_RU = { red: 'КРАСНЫХ', blue: 'СИНИХ' };
 const TEAM_COL = { red: '#ff5555', blue: '#7f9fff' };
 
