@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>БЛОКАДА — Minecraft Shooter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,7 +35,7 @@
   }
   .auth-btn:hover { background: #7f8cff; border-color: #c3caff #4a55b0 #4a55b0 #c3caff; }
   .auth-btn:active { transform: translateY(2px); }
-  #authErr { color: #ff5555; font-size: 10px; margin-top: 14px; min-height: 14px; text-shadow: 1px 1px 0 #400; }
+  #authErr { color: #ff5555; font-size: 10px; margin-top: 14px; min-height: 14px; text-shadow: 1px 1px 0 #400; max-width: 360px; text-align: center; line-height: 1.6; }
 
   /* ============ ГЛАВНОЕ МЕНЮ ============ */
   #menu {
@@ -49,7 +49,6 @@
   @keyframes pulse { from { transform: rotate(-12deg) translateX(150px) translateY(-26px) scale(1);} to { transform: rotate(-12deg) translateX(150px) translateY(-26px) scale(1.08);} }
   #menu .sub { color: #ccc; font-size: 10px; margin-bottom: 20px; text-shadow: 2px 2px 0 #222; }
 
-  /* Ник над кнопкой */
   #menuNick {
     color: #ffff55; font-size: 16px; margin-bottom: 26px;
     text-shadow: 3px 3px 0 #000; letter-spacing: 2px;
@@ -70,8 +69,60 @@
   .mc-btn:disabled { opacity: .5; cursor: default; }
   .mc-btn.small { width: 360px; margin-top: 12px; font-size: 11px; padding: 12px 0; }
   #menu .hint { margin-top: 36px; color: #aaa; font-size: 9px; line-height: 2; text-align: center; text-shadow: 1px 1px 0 #000; }
-  #menu .err { color: #ff5555; font-size: 10px; margin-top: 14px; min-height: 14px; text-shadow: 1px 1px 0 #400; }
+  #menu .err { color: #ff5555; font-size: 10px; margin-top: 14px; min-height: 14px; text-shadow: 1px 1px 0 #400; max-width: 360px; text-align: center; }
   #menu .ver { position: absolute; left: 8px; bottom: 6px; color: #888; font-size: 9px; }
+
+  /* ============ НАСТРОЙКИ ============ */
+  #settings {
+    position: fixed; inset: 0; z-index: 110;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.92);
+    padding: 20px;
+  }
+  #settings .title {
+    color: #f0ad4e; font-size: 22px; letter-spacing: 3px; margin-bottom: 30px;
+    text-shadow: 3px 3px 0 #000;
+  }
+  #settings .box {
+    width: 560px; max-width: 95vw; max-height: 80vh; overflow-y: auto;
+    background: rgba(20,20,20,.95); border: 3px solid #565656; outline: 2px solid #000;
+    padding: 24px;
+  }
+  .settingRow {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 0; border-bottom: 1px solid #2a2a2a;
+  }
+  .settingRow:last-child { border-bottom: none; }
+  .settingRow label { color: #ddd; font-size: 11px; }
+  .settingRow .val { color: #f0ad4e; font-size: 11px; margin-left: 12px; }
+  .toggle {
+    width: 60px; height: 30px; background: #333; border-radius: 15px;
+    position: relative; cursor: pointer; transition: 0.3s; border: 1px solid #555;
+  }
+  .toggle.active { background: #44bb44; }
+  .toggle .knob {
+    width: 24px; height: 24px; background: #fff; border-radius: 50%;
+    position: absolute; top: 2px; left: 2px; transition: 0.3s;
+  }
+  .toggle.active .knob { left: 32px; }
+  input[type="range"] {
+    width: 200px; accent-color: #f0ad4e;
+  }
+  select {
+    background: #222; border: 2px solid #555; color: #fff;
+    padding: 6px 12px; font-size: 11px; font-family: inherit;
+    outline: none;
+  }
+  .settingsBtns {
+    margin-top: 24px; display: flex; gap: 14px; justify-content: center;
+  }
+  .settingsBtns button {
+    padding: 12px 30px; font-size: 11px; cursor: pointer;
+    background: #6f6f6f; color: #fff; border: 2px solid;
+    border-color: #aaa #565656 #565656 #aaa; font-family: inherit;
+    text-shadow: 2px 2px 0 #3f3f3f;
+  }
+  .settingsBtns button:hover { background: #7f8cff; }
 
   /* ============ ИГРА ============ */
   #teamBanner { position: fixed; inset: 0; z-index: 90; display: none; align-items: center; justify-content: center; flex-direction: column; pointer-events: none; }
@@ -164,28 +215,88 @@
 
   #bombTimer { position: fixed; top: 120px; left: 50%; transform: translateX(-50%); display: none; font-size: 32px; font-weight: bold; color: #ffaa00; text-shadow: 3px 3px 0 #000; z-index: 80; letter-spacing: 2px; }
 
-  /* ============ ЧИТ-ПАНЕЛЬ (только для moroz) ============ */
+  /* ============ РАДАР ============ */
+  #radar {
+    position: fixed; top: 20px; right: 20px; z-index: 70;
+    width: 180px; height: 180px;
+    background: rgba(0,0,0,.55); border: 2px solid #555;
+    border-radius: 50%; overflow: hidden; display: none;
+  }
+  #radar canvas { width: 100%; height: 100%; display: block; }
+
+  /* ============ FPS ============ */
+  #fpsCounter {
+    position: fixed; top: 6px; left: 50%; transform: translateX(-50%);
+    z-index: 200; color: #44ff44; font-size: 11px;
+    text-shadow: 1px 1px 0 #000; pointer-events: none;
+    display: none;
+  }
+
+  /* ============ ЧИТ-ПАНЕЛЬ ============ */
   #cheatPanel {
     position: fixed; top: 80px; right: 20px; z-index: 85;
     display: none; flex-direction: column; gap: 8px;
     background: rgba(20,0,0,.85); border: 2px solid #ff2222;
     padding: 14px 18px; box-shadow: 0 0 25px rgba(255,34,34,.5);
   }
-  #cheatPanel .title {
-    color: #ff5555; font-size: 11px; text-align: center;
-    margin-bottom: 8px; letter-spacing: 2px; text-shadow: 2px 2px 0 #000;
-  }
-  #cheatPanel .cheatRow {
-    display: flex; justify-content: space-between; align-items: center;
-    gap: 15px; font-size: 9px; color: #ccc;
-  }
-  #cheatPanel .cheatRow .key {
-    background: #333; padding: 3px 8px; border: 1px solid #555;
-    color: #fff; font-weight: bold;
-  }
+  #cheatPanel .title { color: #ff5555; font-size: 11px; text-align: center; margin-bottom: 8px; letter-spacing: 2px; text-shadow: 2px 2px 0 #000; }
+  #cheatPanel .cheatRow { display: flex; justify-content: space-between; align-items: center; gap: 15px; font-size: 9px; color: #ccc; }
+  #cheatPanel .cheatRow .key { background: #333; padding: 3px 8px; border: 1px solid #555; color: #fff; font-weight: bold; }
   #cheatPanel .cheatRow .val { color: #888; }
   #cheatPanel .cheatRow.active .val { color: #44ff44; }
   #cheatPanel .hint { color: #888; font-size: 8px; margin-top: 8px; text-align: center; line-height: 1.6; }
+
+  /* ============ МОБИЛЬНОЕ УПРАВЛЕНИЕ ============ */
+  #mobileControls {
+    position: fixed; inset: 0; z-index: 75;
+    display: none; pointer-events: none;
+  }
+  #mobileControls.active { display: block; }
+  #joystickZone {
+    position: absolute; bottom: 30px; left: 30px;
+    width: 200px; height: 200px;
+    pointer-events: auto; touch-action: none;
+  }
+  #joystickBase {
+    width: 160px; height: 160px;
+    background: rgba(255,255,255,.1);
+    border: 2px solid rgba(240,173,78,.6);
+    border-radius: 50%;
+    position: absolute; bottom: 20px; left: 20px;
+  }
+  #joystickKnob {
+    width: 70px; height: 70px;
+    background: rgba(240,173,78,.7);
+    border-radius: 50%;
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 15px rgba(240,173,78,.5);
+  }
+  .mobileBtn {
+    width: 80px; height: 80px; border-radius: 50%;
+    background: rgba(240,173,78,.3);
+    border: 2px solid rgba(240,173,78,.7);
+    color: #fff; font-size: 24px; font-weight: bold;
+    cursor: pointer; touch-action: none;
+    position: absolute; pointer-events: auto;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mobileBtn:active { background: rgba(240,173,78,.7); transform: scale(.95); }
+  #fireBtn { bottom: 110px; right: 40px; width: 100px; height: 100px; background: rgba(235,75,75,.4); border-color: rgba(235,75,75,.8); font-size: 32px; }
+  #reloadBtn { bottom: 40px; right: 160px; }
+  #jumpBtn { bottom: 40px; right: 40px; }
+  #bombBtn { bottom: 130px; right: 160px; font-size: 18px; }
+
+  /* ============ АДАПТИВ ============ */
+  @media (max-width: 700px) {
+    #menu .logo { font-size: 32px; }
+    .mc-btn { width: 300px; font-size: 11px; padding: 12px 0; }
+    .auth-input { width: 300px; font-size: 11px; }
+    .auth-btn { width: 300px; font-size: 11px; }
+    #settings .box { width: 100%; padding: 16px; }
+    .settingRow label { font-size: 9px; }
+    #radar { width: 120px; height: 120px; }
+  }
 </style>
 </head>
 <body>
@@ -213,15 +324,54 @@
     </div>
 
     <button id="playBtn" class="mc-btn">ИГРАТЬ</button>
+    <button id="settingsBtn" class="mc-btn small">НАСТРОЙКИ</button>
     <button id="logoutBtn" class="mc-btn small">СМЕНИТЬ НИК</button>
 
     <div class="err" id="menuErr"></div>
     <div class="hint">
       WASD — движение · ЛКМ — огонь · ПКМ — прицел<br>
       1-5 — оружие · ПРОБЕЛ — прыжок · SHIFT — бег · TAB — счёт<br>
-      T — чат · V (зажать) — голос · E — заложить / разминировать бомбу
+      T — чат · V (зажать) — голос · E — бомба · M — радар
     </div>
-    <div class="ver">Blockade v1.3 · made with Cursor</div>
+    <div class="ver">Blockade v1.4 · made with Cursor</div>
+  </div>
+
+  <!-- ============ НАСТРОЙКИ ============ -->
+  <div id="settings">
+    <div class="title">НАСТРОЙКИ</div>
+    <div class="box">
+      <div class="settingRow">
+        <label>📱 Мобильное управление</label>
+        <div class="toggle" id="toggleMobile"><div class="knob"></div></div>
+      </div>
+      <div class="settingRow">
+        <label>🗺 Радар</label>
+        <div class="toggle" id="toggleRadar"><div class="knob"></div></div>
+      </div>
+      <div class="settingRow">
+        <label>📊 Показывать FPS</label>
+        <div class="toggle" id="toggleFps"><div class="knob"></div></div>
+      </div>
+      <div class="settingRow">
+        <label>🖱 Чувствительность: <span class="val" id="sensVal">2.0</span></label>
+        <input type="range" id="sensRange" min="0.5" max="5" step="0.1" value="2.0">
+      </div>
+      <div class="settingRow">
+        <label>🔊 Громкость: <span class="val" id="volVal">50%</span></label>
+        <input type="range" id="volRange" min="0" max="100" step="1" value="50">
+      </div>
+      <div class="settingRow">
+        <label>🎨 Качество графики</label>
+        <select id="qualitySelect">
+          <option value="low">Низкое</option>
+          <option value="medium" selected>Среднее</option>
+          <option value="high">Высокое</option>
+        </select>
+      </div>
+    </div>
+    <div class="settingsBtns">
+      <button id="settingsBack">НАЗАД</button>
+    </div>
   </div>
 
   <div id="teamBanner">
@@ -235,6 +385,7 @@
   </div>
 
   <div id="hud">
+    <div id="fpsCounter">FPS: 60</div>
     <div id="dmgVignette"></div>
     <div id="crosshair"></div>
     <div id="hitmarker"></div>
@@ -252,6 +403,8 @@
       <div class="rel" id="reloadLbl">ПЕРЕЗАРЯДКА...</div>
     </div>
 
+    <div id="radar"><canvas id="radarCanvas" width="360" height="360"></canvas></div>
+
     <div id="plantProgress">
       <div id="plantProgressLabel">ЗАКЛАДКА БОМБЫ 0%</div>
       <div id="plantProgressBar">
@@ -268,7 +421,7 @@
     <div id="scoreboard"></div>
     <div id="pauseHint">
       <div class="t">ПАУЗА</div>
-      <div class="c">ЛКМ — огонь · ПКМ — прицел<br>R — перезарядка · 1 автомат · 2 дробовик · 3 винтовка<br>4 блоки · 5 кирка · E — бомба<br>TAB — счёт · T — чат · V (зажать) — голос</div>
+      <div class="c">ЛКМ — огонь · ПКМ — прицел<br>R — перезарядка · 1 автомат · 2 дробовик · 3 винтовка<br>4 блоки · 5 кирка · E — бомба · M — радар<br>TAB — счёт · T — чат · V (зажать) — голос</div>
       <button class="mc-btn" id="resumeBtn">ВЕРНУТЬСЯ В ИГРУ</button>
     </div>
     <div id="respawnFlash"></div>
@@ -278,7 +431,18 @@
     </div>
     <div id="voiceInd"><div class="dot"></div><span>МИКРОФОН ВКЛЮЧЁН</span></div>
 
-    <!-- ============ ЧИТ-ПАНЕЛЬ ============ -->
+    <!-- Мобильное управление -->
+    <div id="mobileControls">
+      <div id="joystickZone">
+        <div id="joystickBase"><div id="joystickKnob"></div></div>
+      </div>
+      <button class="mobileBtn" id="fireBtn">🔥</button>
+      <button class="mobileBtn" id="reloadBtn">R</button>
+      <button class="mobileBtn" id="jumpBtn">⤴</button>
+      <button class="mobileBtn" id="bombBtn">💣</button>
+    </div>
+
+    <!-- Чит-панель -->
     <div id="cheatPanel">
       <div class="title">ЧИТ-ПАНЕЛЬ · MOROZ</div>
       <div class="cheatRow" id="cheatAim">
@@ -291,7 +455,7 @@
         <span class="key">Z</span>
         <span class="val" id="cheatWallVal">OFF</span>
       </div>
-      <div class="hint">X — автонаведение на врага<br>Z — видеть врагов сквозь стены</div>
+      <div class="hint">X — автонаведение<br>Z — видеть врагов сквозь стены</div>
     </div>
   </div>
 
