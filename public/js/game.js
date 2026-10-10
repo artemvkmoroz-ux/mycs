@@ -7,7 +7,6 @@ import { buildMapBlocks, HALF } from './map.js';
 // ============================================================
 const EYE = 1.62, P_HALF = 0.3, P_HEIGHT = 1.8;
 const GRAVITY = 23, JUMP_V = 8.6, WALK = 5.8, SPRINT = 8.4;
-const SENS = 0.0023;
 
 const WEAPONS = {
   rifle:   { name: 'АВТОМАТ',  dmg: 18, rate: 110,  mag: 30, reload: 1800, spread: 0.014, auto: true,  pellets: 1, range: 90 },
@@ -19,6 +18,49 @@ const WEAPONS = {
 const SLOTS = ['rifle', 'shotgun', 'sniper', 'blocks', 'pickaxe'];
 const TEAM_RU = { red: 'КРАСНЫХ', blue: 'СИНИХ' };
 const TEAM_COL = { red: '#ff5555', blue: '#7f9fff' };
+
+// ============================================================
+// НАСТРОЙКИ
+// ============================================================
+const SETTINGS = {
+  mobile: false,
+  radar: false,
+  showFps: false,
+  sensitivity: 2.0,
+  volume: 0.5,
+  quality: 'medium',
+};
+
+function loadSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('blockade_settings') || '{}');
+    Object.assign(SETTINGS, saved);
+  } catch {}
+  applySettings();
+}
+
+function saveSettings() {
+  localStorage.setItem('blockade_settings', JSON.stringify(SETTINGS));
+  applySettings();
+}
+
+function applySettings() {
+  document.getElementById('toggleMobile')?.classList.toggle('active', SETTINGS.mobile);
+  document.getElementById('toggleRadar')?.classList.toggle('active', SETTINGS.radar);
+  document.getElementById('toggleFps')?.classList.toggle('active', SETTINGS.showFps);
+  const s = document.getElementById('sensRange');
+  if (s) { s.value = SETTINGS.sensitivity; const sv = document.getElementById('sensVal'); if (sv) sv.textContent = SETTINGS.sensitivity.toFixed(1); }
+  const v = document.getElementById('volRange');
+  if (v) { v.value = Math.round(SETTINGS.volume * 100); const vv = document.getElementById('volVal'); if (vv) vv.textContent = Math.round(SETTINGS.volume * 100) + '%'; }
+  const q = document.getElementById('qualitySelect');
+  if (q) q.value = SETTINGS.quality;
+
+  document.getElementById('mobileControls')?.classList.toggle('active', SETTINGS.mobile);
+  const radarEl = document.getElementById('radar');
+  if (radarEl) radarEl.style.display = SETTINGS.radar ? 'block' : 'none';
+  const fpsEl = document.getElementById('fpsCounter');
+  if (fpsEl) fpsEl.style.display = SETTINGS.showFps ? 'block' : 'none';
+}
 
 // ============================================================
 // Globals
@@ -69,11 +111,21 @@ let defuseStartTime = 0;
 let defuseDuration = 5000;
 let defuseProgressInterval = null;
 
-// ============ ЧИТЫ (только moroz) ============
+// ============ ЧИТЫ ============
 let isCheater = false;
 let aimbotOn = false;
 let wallhackOn = false;
-const cheatESP = new Map(); // id -> { box, name }
+const cheatESP = new Map();
+
+// ============ FPS ============
+let fpsFrames = 0, fpsLast = performance.now();
+
+// ============ МОБИЛЬНОЕ УПРАВЛЕНИЕ ============
+let joystickActive = false;
+let joystickVector = { x: 0, y: 0 };
+let touchLookId = null;
+let touchLookLast = { x: 0, y: 0 };
+let mobileInited = false;
 
 // ============================================================
 // Audio
@@ -88,7 +140,7 @@ function noiseBurst(dur, freq, vol, type = 'lowpass') {
     for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
     const src = ctx.createBufferSource(); src.buffer = buf;
     const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq;
-    const g = ctx.createGain(); g.gain.value = vol;
+    const g = ctx.createGain(); g.gain.value = vol * SETTINGS.volume * 2;
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
     src.connect(f); f.connect(g); g.connect(ctx.destination);
     src.start();
@@ -99,7 +151,7 @@ function tone(freq, dur, vol, type = 'square', slide = 0) {
     const ctx = ac();
     const o = ctx.createOscillator(); o.type = type; o.frequency.value = freq;
     if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), ctx.currentTime + dur);
-    const g = ctx.createGain(); g.gain.value = vol;
+    const g = ctx.createGain(); g.gain.value = vol * SETTINGS.volume * 2;
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
     o.connect(g); g.connect(ctx.destination);
     o.start(); o.stop(ctx.currentTime + dur);
@@ -138,7 +190,8 @@ function dirtBackground() {
     g.fillRect(x, y, 1, 1);
   }
   g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(0, 0, 16, 16);
-  document.getElementById('menu').style.backgroundImage = `url(${c.toDataURL()})`;
+  const menuEl = document.getElementById('menu');
+  if (menuEl) menuEl.style.backgroundImage = `url(${c.toDataURL()})`;
 }
 
 const $ = id => document.getElementById(id);
@@ -150,6 +203,7 @@ function setupAuth() {
   const err = $('authErr');
 
   nameInput.value = localStorage.getItem('blockade_name') || '';
+  passInput.value = localStorage.getItem('blockade_password') || '';
   nameInput.focus();
 
   const start = () => {
@@ -159,9 +213,9 @@ function setupAuth() {
     if (pass.length < 3) { err.textContent = 'Пароль минимум 3 символа!'; return; }
     err.textContent = '';
     btn.disabled = true;
-    // Переходим в меню
     myName = name;
     localStorage.setItem('blockade_name', name);
+    localStorage.setItem('blockade_password', pass);
     showMenu(name);
   };
   btn.addEventListener('click', start);
@@ -171,6 +225,7 @@ function setupAuth() {
 
 function showMenu(name) {
   $('authScreen').style.display = 'none';
+  $('settings').style.display = 'none';
   $('menu').style.display = 'flex';
   $('menuNickText').textContent = name;
   $('playBtn').disabled = false;
@@ -179,6 +234,7 @@ function showMenu(name) {
 function showAuth() {
   $('authScreen').style.display = 'flex';
   $('menu').style.display = 'none';
+  $('settings').style.display = 'none';
 }
 
 function setupMenu() {
@@ -187,9 +243,9 @@ function setupMenu() {
 
   btn.addEventListener('click', () => {
     const name = $('menuNickText').textContent;
-    const pass = $('regPassword').value.trim();
+    const pass = $('regPassword').value.trim() || localStorage.getItem('blockade_password') || '';
     if (name === '—' || !name) { err.textContent = 'Введи ник!'; return; }
-    if (!pass) { err.textContent = 'Введи пароль на экране регистрации!'; return; }
+    if (!pass) { err.textContent = 'Введи пароль!'; return; }
     err.textContent = '';
     btn.disabled = true;
     connect(name, pass);
@@ -198,6 +254,25 @@ function setupMenu() {
   $('logoutBtn').addEventListener('click', () => {
     showAuth();
   });
+
+  $('settingsBtn').addEventListener('click', () => {
+    $('menu').style.display = 'none';
+    $('settings').style.display = 'flex';
+    applySettings();
+  });
+
+  $('settingsBack').addEventListener('click', () => {
+    $('settings').style.display = 'none';
+    $('menu').style.display = 'flex';
+  });
+
+  // Переключатели в настройках
+  $('toggleMobile').addEventListener('click', () => { SETTINGS.mobile = !SETTINGS.mobile; saveSettings(); if (SETTINGS.mobile && inGame && !mobileInited) initMobileControls(); });
+  $('toggleRadar').addEventListener('click', () => { SETTINGS.radar = !SETTINGS.radar; saveSettings(); });
+  $('toggleFps').addEventListener('click', () => { SETTINGS.showFps = !SETTINGS.showFps; saveSettings(); });
+  $('sensRange').addEventListener('input', e => { SETTINGS.sensitivity = parseFloat(e.target.value); saveSettings(); });
+  $('volRange').addEventListener('input', e => { SETTINGS.volume = parseInt(e.target.value) / 100; saveSettings(); });
+  $('qualitySelect').addEventListener('change', e => { SETTINGS.quality = e.target.value; saveSettings(); });
 }
 
 // ============================================================
@@ -251,6 +326,7 @@ function handleMsg(m) {
       }
       startGame();
       initVoice();
+      if (SETTINGS.mobile) initMobileControls();
       break;
     }
     case 'join': addRemote(m.p); feed(`${m.p.name} зашёл в игру`, m.p.team); break;
@@ -429,7 +505,6 @@ function addChatMessage(name, team, text) {
   box.appendChild(div);
   while (box.children.length > 8) box.firstChild.remove();
   setTimeout(() => { div.style.opacity = 0; setTimeout(() => div.remove(), 600); }, 9000);
-  SND.hit();
 }
 
 function openChat() {
@@ -460,7 +535,7 @@ function sysChat(text) {
 }
 
 // ============================================================
-// Voice chat
+// Voice
 // ============================================================
 const voicePeers = new Map();
 let micStream = null, micTrack = null, voiceFailed = false;
@@ -473,10 +548,9 @@ async function initVoice() {
       });
       micTrack = micStream.getAudioTracks()[0];
       micTrack.enabled = false;
-      sysChat('Голосовой чат включён — зажми V, чтобы говорить');
+      sysChat('Голосовой чат включён — зажми V');
     } catch {
       voiceFailed = true;
-      sysChat('Микрофон недоступен');
     }
   }
   for (const id of remotes.keys()) makeVoicePeer(id, true);
@@ -697,7 +771,7 @@ function updateRemotes(dt) {
   const k = Math.min(1, dt * 14);
   for (const r of remotes.values()) {
     const vp = voicePeers.get(r.id);
-    if (vp) vp.audio.volume = Math.max(0.15, Math.min(1, 1.25 - r.group.position.distanceTo(me.pos) / 50));
+    if (vp) vp.audio.volume = Math.max(0.15, Math.min(1, 1.25 - r.group.position.distanceTo(me.pos) / 50)) * SETTINGS.volume * 2;
     if (!r.alive) continue;
     r.group.position.lerp(r.target, k);
     let dy = (r.try + Math.PI) - r.group.rotation.y;
@@ -716,7 +790,7 @@ function updateRemotes(dt) {
 }
 
 // ============================================================
-// ЧИТЫ (только moroz)
+// ЧИТЫ
 // ============================================================
 function setupCheats() {
   if (!isCheater) { $('cheatPanel').style.display = 'none'; return; }
@@ -739,7 +813,6 @@ function toggleWallhack() {
   $('cheatWallVal').textContent = wallhackOn ? 'ON' : 'OFF';
   $('cheatWall').classList.toggle('active', wallhackOn);
   sysChat(wallhackOn ? '👁 Wallhack ВКЛ' : '👁 Wallhack ВЫКЛ');
-  // Показать/скрыть ESP
   if (!wallhackOn) {
     for (const esp of cheatESP.values()) scene.remove(esp);
     cheatESP.clear();
@@ -790,7 +863,6 @@ function updateWallhack() {
     esp.position.copy(r.group.position);
     esp.position.y += 0.9;
   }
-  // Удалить мёртвых
   for (const id of [...cheatESP.keys()]) {
     if (!alive.has(id)) { scene.remove(cheatESP.get(id)); cheatESP.delete(id); }
   }
@@ -811,25 +883,41 @@ function collideAxis(pos) {
 }
 
 function movePlayer(dt) {
-  const sprint = keys['ShiftLeft'] || keys['ShiftRight'];
-  const speed = sprint ? SPRINT : WALK;
-  let fx = 0, fz = 0;
-  if (keys['KeyW']) fz -= 1;
-  if (keys['KeyS']) fz += 1;
-  if (keys['KeyA']) fx -= 1;
-  if (keys['KeyD']) fx += 1;
-  const len = Math.hypot(fx, fz);
-  let wishX = 0, wishZ = 0;
-  if (len > 0) {
-    fx /= len; fz /= len;
-    wishX = (-Math.sin(me.ry)) * (-fz) * speed + Math.cos(me.ry) * fx * speed;
-    wishZ = (-Math.cos(me.ry)) * (-fz) * speed + (-Math.sin(me.ry)) * fx * speed;
+  // Мобильный джойстик
+  if (SETTINGS.mobile && joystickActive) {
+    const speed = SPRINT;
+    const forward = new THREE.Vector3(-Math.sin(me.ry), 0, -Math.cos(me.ry));
+    const right = new THREE.Vector3(Math.cos(me.ry), 0, -Math.sin(me.ry));
+    const move = new THREE.Vector3();
+    if (joystickVector.y < -0.2) move.add(forward);
+    if (joystickVector.y > 0.2) move.sub(forward);
+    if (joystickVector.x > 0.2) move.add(right);
+    if (joystickVector.x < -0.2) move.sub(right);
+    if (move.length() > 0) move.normalize().multiplyScalar(speed);
+    const accel = me.onGround ? 14 : 4;
+    me.vel.x += (move.x - me.vel.x) * Math.min(1, accel * dt);
+    me.vel.z += (move.z - me.vel.z) * Math.min(1, accel * dt);
+  } else {
+    const sprint = keys['ShiftLeft'] || keys['ShiftRight'];
+    const speed = sprint ? SPRINT : WALK;
+    let fx = 0, fz = 0;
+    if (keys['KeyW']) fz -= 1;
+    if (keys['KeyS']) fz += 1;
+    if (keys['KeyA']) fx -= 1;
+    if (keys['KeyD']) fx += 1;
+    const len = Math.hypot(fx, fz);
+    let wishX = 0, wishZ = 0;
+    if (len > 0) {
+      fx /= len; fz /= len;
+      wishX = (-Math.sin(me.ry)) * (-fz) * speed + Math.cos(me.ry) * fx * speed;
+      wishZ = (-Math.cos(me.ry)) * (-fz) * speed + (-Math.sin(me.ry)) * fx * speed;
+    }
+    const accel = me.onGround ? 14 : 4;
+    me.vel.x += (wishX - me.vel.x) * Math.min(1, accel * dt);
+    me.vel.z += (wishZ - me.vel.z) * Math.min(1, accel * dt);
   }
-  const accel = me.onGround ? 14 : 4;
-  me.vel.x += (wishX - me.vel.x) * Math.min(1, accel * dt);
-  me.vel.z += (wishZ - me.vel.z) * Math.min(1, accel * dt);
-  me.vel.y -= GRAVITY * dt;
 
+  me.vel.y -= GRAVITY * dt;
   if (keys['Space'] && me.onGround) { me.vel.y = JUMP_V; me.onGround = false; }
 
   const p = me.pos;
@@ -845,7 +933,7 @@ function movePlayer(dt) {
     me.vel.y = 0;
   }
   if (p.y < -10) { p.set(myTeam === 'red' ? -28 : 28, 1.05, 0); me.vel.set(0, 0, 0); }
-  return len > 0 ? (sprint ? 1 : 0.6) : 0;
+  return (Math.abs(me.vel.x) + Math.abs(me.vel.z)) > 0.5 ? 0.6 : 0;
 }
 
 // ============================================================
@@ -1304,14 +1392,74 @@ function updateScoreboard() {
 }
 
 // ============================================================
+// РАДАР
+// ============================================================
+function updateRadar() {
+  const canvas = $('radarCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height, cx = W/2, cy = H/2;
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.fillStyle = 'rgba(20,30,20,0.8)';
+  ctx.beginPath(); ctx.arc(cx, cy, cx-2, 0, Math.PI*2); ctx.fill();
+
+  const R = cx - 10;
+  const scale = R / 50;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  // Враги
+  for (const r of remotes.values()) {
+    if (!r.alive || r.team === myTeam) continue;
+    const dx = r.group.position.x - me.pos.x;
+    const dz = r.group.position.z - me.pos.z;
+    const cs = Math.cos(-me.ry), sn = Math.sin(-me.ry);
+    const rx = dx * cs - dz * sn;
+    const rz = dx * sn + dz * cs;
+    if (Math.abs(rx) > 50 || Math.abs(rz) > 50) continue;
+    ctx.fillStyle = '#ff3333';
+    ctx.beginPath(); ctx.arc(rx * scale, rz * scale, 5, 0, Math.PI*2); ctx.fill();
+  }
+
+  // Бомба
+  if (activeBomb) {
+    const dx = activeBomb.x - me.pos.x;
+    const dz = activeBomb.z - me.pos.z;
+    const cs = Math.cos(-me.ry), sn = Math.sin(-me.ry);
+    const rx = dx * cs - dz * sn;
+    const rz = dx * sn + dz * cs;
+    if (Math.abs(rx) < 50 && Math.abs(rz) < 50) {
+      ctx.fillStyle = '#ffaa00';
+      ctx.beginPath(); ctx.arc(rx * scale, rz * scale, 7, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('B', rx * scale, rz * scale);
+    }
+  }
+
+  // Я
+  ctx.fillStyle = '#44ff44';
+  ctx.beginPath();
+  ctx.moveTo(0, -10);
+  ctx.lineTo(8, 8);
+  ctx.lineTo(0, 4);
+  ctx.lineTo(-8, 8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+// ============================================================
 // БОМБА
 // ============================================================
 function spawnBombMesh() {
   if (bombMesh) scene.remove(bombMesh);
   const geo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0xff2200, emissive: 0xaa0000, emissiveIntensity: 0.6,
-  });
+  const mat = new THREE.MeshStandardMaterial({ color: 0xff2200, emissive: 0xaa0000, emissiveIntensity: 0.6 });
   bombMesh = new THREE.Mesh(geo, mat);
   bombMesh.position.set(activeBomb.x, activeBomb.y + 0.3, activeBomb.z);
   bombMesh.castShadow = true;
@@ -1349,15 +1497,6 @@ function startPlant() {
   showPlantProgress();
   sysChat('🔧 Закладываю бомбу... не двигайся!');
   tone(330, 0.15, 0.15, 'square');
-}
-
-function cancelPlant() {
-  if (!planting) return;
-  planting = false;
-  clearInterval(plantProgressInterval);
-  plantProgressInterval = null;
-  $('plantProgress').style.display = 'none';
-  netSend({ t: 'cancelPlant' });
 }
 
 function finishPlant() {
@@ -1400,15 +1539,6 @@ function startDefuse() {
   tone(440, 0.15, 0.15, 'square');
 }
 
-function cancelDefuse() {
-  if (!defusing) return;
-  defusing = false;
-  clearInterval(defuseProgressInterval);
-  defuseProgressInterval = null;
-  $('plantProgress').style.display = 'none';
-  netSend({ t: 'cancelDefuse' });
-}
-
 function finishDefuse() {
   if (!defusing) return;
   defusing = false;
@@ -1435,6 +1565,95 @@ function showDefuseProgress() {
 }
 
 // ============================================================
+// МОБИЛЬНОЕ УПРАВЛЕНИЕ
+// ============================================================
+function initMobileControls() {
+  if (mobileInited) return;
+  mobileInited = true;
+  const zone = $('joystickZone');
+  const knob = $('joystickKnob');
+  const fireBtn = $('fireBtn');
+  const reloadBtn = $('reloadBtn');
+  const jumpBtn = $('jumpBtn');
+  const bombBtn = $('bombBtn');
+  if (!zone) return;
+
+  let baseCenter = { x: 0, y: 0 };
+  const baseRadius = 80;
+
+  zone.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const t = e.touches[0];
+    const rect = zone.getBoundingClientRect();
+    baseCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    joystickActive = true;
+    updateJoystick(t.clientX, t.clientY, baseCenter, baseRadius, knob);
+  }, { passive: false });
+
+  zone.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (!joystickActive) return;
+    const t = e.touches[0];
+    updateJoystick(t.clientX, t.clientY, baseCenter, baseRadius, knob);
+  }, { passive: false });
+
+  zone.addEventListener('touchend', e => {
+    e.preventDefault();
+    joystickActive = false;
+    joystickVector = { x: 0, y: 0 };
+    if (knob) knob.style.transform = 'translate(-50%, -50%)';
+  });
+
+  // Обзор — свайп по правой части
+  document.addEventListener('touchstart', e => {
+    const t = e.touches[0];
+    if (t.clientX > window.innerWidth / 2 && !touchLookId) {
+      touchLookId = t.identifier;
+      touchLookLast = { x: t.clientX, y: t.clientY };
+    }
+  }, { passive: false });
+
+  document.addEventListener('touchmove', e => {
+    for (const t of e.touches) {
+      if (t.identifier === touchLookId) {
+        const dx = t.clientX - touchLookLast.x;
+        const dy = t.clientY - touchLookLast.y;
+        touchLookLast = { x: t.clientX, y: t.clientY };
+        me.ry -= dx * 0.005 * SETTINGS.sensitivity;
+        me.rx -= dy * 0.005 * SETTINGS.sensitivity;
+        me.rx = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, me.rx));
+      }
+    }
+  }, { passive: false });
+
+  document.addEventListener('touchend', e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === touchLookId) touchLookId = null;
+    }
+  });
+
+  fireBtn?.addEventListener('touchstart', e => { e.preventDefault(); mouseDown = true; tryShoot(performance.now()); });
+  fireBtn?.addEventListener('touchend', e => { e.preventDefault(); mouseDown = false; });
+  reloadBtn?.addEventListener('touchstart', e => { e.preventDefault(); startReload(); });
+  jumpBtn?.addEventListener('touchstart', e => { e.preventDefault(); keys['Space'] = true; setTimeout(() => keys['Space'] = false, 100); });
+  bombBtn?.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (activeBomb) startDefuse();
+    else if (!planting) startPlant();
+  });
+}
+
+function updateJoystick(tx, ty, center, radius, knob) {
+  let dx = tx - center.x;
+  let dy = ty - center.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  if (dist > radius) { dx = dx / dist * radius; dy = dy / dist * radius; }
+  if (knob) knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  joystickVector.x = dx / radius;
+  joystickVector.y = dy / radius;
+}
+
+// ============================================================
 // Input
 // ============================================================
 function setupInput() {
@@ -1456,8 +1675,8 @@ function setupInput() {
     if (e.code === 'Tab') { e.preventDefault(); tabHeld = true; updateScoreboard(); }
     if (e.code === 'KeyR') startReload();
     if (/^Digit[1-9]$/.test(e.code)) selectSlot(parseInt(e.code[5]) - 1);
+    if (e.code === 'KeyM') { SETTINGS.radar = !SETTINGS.radar; saveSettings(); }
 
-    // Читерские клавиши
     if (e.code === 'KeyX' && isCheater) { e.preventDefault(); toggleAimbot(); }
     if (e.code === 'KeyZ' && isCheater) { e.preventDefault(); toggleWallhack(); }
 
@@ -1474,20 +1693,15 @@ function setupInput() {
   });
   document.addEventListener('mousemove', e => {
     if (!locked || me.dead) return;
-    // Если включён aimbot — мышь всё равно работает, но автонаведение перебивает
-    me.ry -= e.movementX * SENS;
-    me.rx -= e.movementY * SENS * (me.zoomed ? 0.5 : 1);
+    me.ry -= e.movementX * 0.0023 * SETTINGS.sensitivity;
+    me.rx -= e.movementY * 0.0023 * SETTINGS.sensitivity * (me.zoomed ? 0.5 : 1);
     me.rx = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, me.rx));
   });
   document.addEventListener('mousedown', e => {
     if (!inGame || chatOpen) return;
     if (!locked) { canvas.requestPointerLock(); return; }
-    if (e.button === 0) {
-      mouseDown = true;
-      tryShoot(performance.now());
-    } else if (e.button === 2) {
-      me.zoomed = !me.zoomed;
-    }
+    if (e.button === 0) { mouseDown = true; tryShoot(performance.now()); }
+    else if (e.button === 2) { me.zoomed = !me.zoomed; }
   });
   document.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; });
   document.addEventListener('contextmenu', e => e.preventDefault());
@@ -1518,17 +1732,17 @@ function initScene() {
   camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.08, 300);
   scene.add(camera);
 
-  renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: false });
+  renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: SETTINGS.quality === 'high' });
   renderer.setSize(innerWidth, innerHeight);
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
+  renderer.setPixelRatio(SETTINGS.quality === 'low' ? 1 : Math.min(devicePixelRatio, 2));
+  renderer.shadowMap.enabled = SETTINGS.quality !== 'low';
   renderer.shadowMap.type = THREE.PCFShadowMap;
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.75));
   const sun = new THREE.DirectionalLight(0xfff4d6, 1.6);
   sun.position.set(40, 70, 25);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.castShadow = SETTINGS.quality !== 'low';
+  sun.shadow.mapSize.set(SETTINGS.quality === 'high' ? 2048 : 1024, SETTINGS.quality === 'high' ? 2048 : 1024);
   sun.shadow.camera.left = -50; sun.shadow.camera.right = 50;
   sun.shadow.camera.top = 50; sun.shadow.camera.bottom = -50;
   sun.shadow.camera.far = 200;
@@ -1553,6 +1767,7 @@ function startGame() {
   inGame = true;
   $('menu').style.display = 'none';
   $('authScreen').style.display = 'none';
+  $('settings').style.display = 'none';
   $('hud').style.display = 'block';
   $('scoreRed').textContent = scores.red;
   $('scoreBlue').textContent = scores.blue;
@@ -1565,6 +1780,7 @@ function startGame() {
   buildViewModels();
   updateHearts(); updateHotbar(); updateAmmoHud();
   setupCheats();
+  if (SETTINGS.mobile) initMobileControls();
   SND.spawn();
   renderer.domElement.requestPointerLock();
 }
@@ -1586,7 +1802,6 @@ function loop() {
       lastAnim = moving;
       const w = currentWeapon();
       if (mouseDown && w.auto && !planting && !defusing) tryShoot(now);
-      // Aimbot — принудительно поворачиваем камеру к врагу
       runAimbot();
     } else if (!me.dead) {
       me.vel.x = me.vel.z = 0;
@@ -1607,6 +1822,15 @@ function loop() {
     updateViewModel(dt, moving > 0);
     updateWallhack();
     if (tabHeld) updateScoreboard();
+    if (SETTINGS.radar) updateRadar();
+    if (SETTINGS.showFps) {
+      fpsFrames++;
+      if (now - fpsLast >= 500) {
+        const fpsEl = $('fpsCounter');
+        if (fpsEl) fpsEl.textContent = 'FPS: ' + Math.round(fpsFrames / ((now - fpsLast) / 1000));
+        fpsFrames = 0; fpsLast = now;
+      }
+    }
 
     scene.traverse(o => {
       if (o.userData.cloud) {
@@ -1629,6 +1853,9 @@ function loop() {
 }
 
 // ============================================================
+// START
+// ============================================================
+loadSettings();
 setupAuth();
 setupMenu();
 initScene();
