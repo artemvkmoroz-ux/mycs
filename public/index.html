@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>БЛОКАДА — Minecraft Shooter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+  body, button, input { font-family: 'Press Start 2P', monospace; }
+  canvas#game { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+
+  /* ============ ЭКРАН РЕГИСТРАЦИИ ============ */
+  #authScreen {
+    position: fixed; inset: 0; z-index: 120;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #1a1410;
+    background-image: radial-gradient(circle at 50% 50%, #2a1f15 0%, #0a0604 100%);
+  }
+  #authScreen .logo { font-size: 48px; color: #fff; letter-spacing: 4px; text-shadow: 5px 5px 0 #3f3f3f; margin-bottom: 8px; }
+  #authScreen .sub { color: #ccc; font-size: 10px; margin-bottom: 40px; text-shadow: 2px 2px 0 #222; }
+  .auth-input {
+    width: 360px; padding: 14px; font-size: 13px; color: #fff; text-align: center;
+    background: #000; border: 2px solid #a0a0a0; outline: none; margin-bottom: 14px;
+  }
+  .auth-input:focus { border-color: #fff; }
+  .auth-btn {
+    width: 360px; padding: 15px 0; font-size: 13px; color: #fff; cursor: pointer;
+    background: #6f6f6f; border: 2px solid; border-color: #aaa #565656 #565656 #aaa;
+    box-shadow: inset 0 -4px 0 rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.25), 0 0 0 2px #000;
+    text-shadow: 2px 2px 0 #3f3f3f;
+  }
+  .auth-btn:hover { background: #7f8cff; border-color: #c3caff #4a55b0 #4a55b0 #c3caff; }
+  .auth-btn:active { transform: translateY(2px); }
+  #authErr { color: #ff5555; font-size: 10px; margin-top: 14px; min-height: 14px; text-shadow: 1px 1px 0 #400; }
+
+  /* ============ ГЛАВНОЕ МЕНЮ ============ */
+  #menu {
+    position: fixed; inset: 0; z-index: 100;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    background-repeat: repeat; background-size: 64px 64px;
+    image-rendering: pixelated;
+  }
+  #menu .logo { font-size: 52px; color: #fff; letter-spacing: 4px; text-shadow: 5px 5px 0 #3f3f3f; margin-bottom: 8px; }
+  #menu .splash { color: #ffff55; font-size: 11px; transform: rotate(-12deg) translateX(150px) translateY(-26px); text-shadow: 2px 2px 0 #3f3f00; animation: pulse 0.5s infinite alternate; }
+  @keyframes pulse { from { transform: rotate(-12deg) translateX(150px) translateY(-26px) scale(1);} to { transform: rotate(-12deg) translateX(150px) translateY(-26px) scale(1.08);} }
+  #menu .sub { color: #ccc; font-size: 10px; margin-bottom: 20px; text-shadow: 2px 2px 0 #222; }
+
+  /* Ник над кнопкой */
+  #menuNick {
+    color: #ffff55; font-size: 16px; margin-bottom: 26px;
+    text-shadow: 3px 3px 0 #000; letter-spacing: 2px;
+    padding: 10px 30px;
+    background: rgba(0,0,0,.5);
+    border: 2px solid #555;
+  }
+  #menuNick .label { color: #888; font-size: 9px; }
+
+  .mc-btn {
+    width: 360px; padding: 15px 0; font-size: 13px; color: #fff; cursor: pointer;
+    background: #6f6f6f; border: 2px solid; border-color: #aaa #565656 #565656 #aaa;
+    box-shadow: inset 0 -4px 0 rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.25), 0 0 0 2px #000;
+    text-shadow: 2px 2px 0 #3f3f3f;
+  }
+  .mc-btn:hover { background: #7f8cff; border-color: #c3caff #4a55b0 #4a55b0 #c3caff; }
+  .mc-btn:active { transform: translateY(2px); }
+  .mc-btn:disabled { opacity: .5; cursor: default; }
+  .mc-btn.small { width: 360px; margin-top: 12px; font-size: 11px; padding: 12px 0; }
+  #menu .hint { margin-top: 36px; color: #aaa; font-size: 9px; line-height: 2; text-align: center; text-shadow: 1px 1px 0 #000; }
+  #menu .err { color: #ff5555; font-size: 10px; margin-top: 14px; min-height: 14px; text-shadow: 1px 1px 0 #400; }
+  #menu .ver { position: absolute; left: 8px; bottom: 6px; color: #888; font-size: 9px; }
+
+  /* ============ ИГРА ============ */
+  #teamBanner { position: fixed; inset: 0; z-index: 90; display: none; align-items: center; justify-content: center; flex-direction: column; pointer-events: none; }
+  #teamBanner .big { font-size: 34px; text-shadow: 4px 4px 0 #000; }
+  #teamBanner .small { font-size: 12px; color: #eee; margin-top: 18px; text-shadow: 2px 2px 0 #000; }
+
+  #roundWin { position: fixed; inset: 0; z-index: 95; display: none; align-items: center; justify-content: center; flex-direction: column; background: rgba(0,0,0,.7); pointer-events: none; }
+  #roundWin .winText { font-size: 40px; text-shadow: 5px 5px 0 #000; letter-spacing: 4px; }
+  #roundWin .winSub { font-size: 12px; color: #ccc; margin-top: 20px; text-shadow: 2px 2px 0 #000; }
+  #roundWin.red .winText { color: #ff5555; }
+  #roundWin.blue .winText { color: #7f9fff; }
+
+  #hud { position: fixed; inset: 0; z-index: 50; display: none; pointer-events: none; }
+  #crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 18px; height: 18px; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255,255,255,.9); mix-blend-mode: difference; }
+  #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+  #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
+
+  #scoreTop { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; align-items: center; background: rgba(0,0,0,.45); padding: 8px 18px; border: 2px solid #000; }
+  #scoreTop .red { color: #ff5555; font-size: 18px; text-shadow: 2px 2px 0 #000; }
+  #scoreTop .blue { color: #7f9fff; font-size: 18px; text-shadow: 2px 2px 0 #000; }
+  #scoreTop .vs { color: #ccc; font-size: 10px; }
+
+  #killfeed { position: absolute; top: 12px; right: 12px; text-align: right; }
+  #killfeed div { font-size: 9px; color: #fff; background: rgba(0,0,0,.5); padding: 5px 8px; margin-bottom: 4px; text-shadow: 1px 1px 0 #000; }
+  #killfeed .r { color: #ff7777; } #killfeed .b { color: #88a7ff; }
+
+  #hearts { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); display: flex; gap: 1px; }
+  #hearts img { width: 22px; height: 22px; image-rendering: pixelated; }
+
+  #hotbar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; }
+  .slot { width: 58px; height: 58px; background: rgba(30,30,30,.75); border: 3px solid #565656; outline: 2px solid #000; margin: 0 1px; display: flex; align-items: center; justify-content: center; position: relative; }
+  .slot.sel { border-color: #fff; }
+  .slot img { width: 44px; height: 44px; image-rendering: pixelated; }
+  .slot .key { position: absolute; top: 1px; left: 3px; font-size: 8px; color: #ddd; text-shadow: 1px 1px 0 #000; }
+  .slot .cnt { position: absolute; bottom: 2px; right: 3px; font-size: 9px; color: #fff; text-shadow: 1px 1px 0 #000; }
+
+  #ammo { position: absolute; right: 20px; bottom: 20px; text-align: right; }
+  #ammo .num { font-size: 28px; color: #fff; text-shadow: 3px 3px 0 #000; }
+  #ammo .wname { font-size: 9px; color: #ccc; margin-top: 6px; text-shadow: 1px 1px 0 #000; }
+  #ammo .rel { font-size: 10px; color: #ffff55; margin-top: 6px; display: none; text-shadow: 1px 1px 0 #000; }
+
+  #hitmarker { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%) rotate(45deg); width: 26px; height: 26px; opacity: 0; pointer-events: none; }
+  #hitmarker::before, #hitmarker::after { content:''; position: absolute; background: #fff; }
+  #hitmarker::before { left: 12px; top: 0; width: 2px; height: 26px; }
+  #hitmarker::after { left: 0; top: 12px; width: 26px; height: 2px; }
+  #hitmarker.head::before, #hitmarker.head::after { background: #ff4444; }
+
+  #dmgVignette { position: absolute; inset: 0; opacity: 0; transition: opacity .35s; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,.55) 100%); }
+
+  #deathScreen { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(120, 0, 0, 0.45); }
+  #deathScreen .t { font-size: 36px; color: #fff; text-shadow: 4px 4px 0 #500; }
+  #deathScreen .by { font-size: 12px; color: #eee; margin-top: 20px; text-shadow: 2px 2px 0 #000; }
+  #deathScreen .cd { font-size: 14px; color: #ffff55; margin-top: 26px; text-shadow: 2px 2px 0 #000; }
+
+  #scoreboard { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); display: none; background: rgba(0,0,0,.8); border: 3px solid #565656; outline: 2px solid #000; padding: 18px 26px; min-width: 560px; }
+  #scoreboard h3 { font-size: 12px; margin: 8px 0; text-shadow: 2px 2px 0 #000; }
+  #scoreboard h3.red { color: #ff5555; } #scoreboard h3.blue { color: #7f9fff; }
+  #scoreboard table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  #scoreboard td, #scoreboard th { font-size: 9px; color: #ddd; padding: 4px 8px; text-align: left; text-shadow: 1px 1px 0 #000; }
+  #scoreboard th { color: #999; }
+  #scoreboard td.me { color: #ffff55; }
+
+  #pauseHint { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); display: none; flex-direction: column; align-items: center; gap: 14px; background: rgba(0,0,0,.75); border: 3px solid #565656; outline: 2px solid #000; padding: 26px 34px; }
+  #pauseHint .t { color: #fff; font-size: 14px; text-shadow: 2px 2px 0 #000; }
+  #pauseHint .c { color: #aaa; font-size: 9px; line-height: 2.1; text-align: center; }
+  #pauseHint button { pointer-events: auto; width: 280px; padding: 12px 0; font-size: 11px; }
+
+  #respawnFlash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+
+  #chat { position: absolute; left: 12px; bottom: 96px; width: 440px; max-width: 45vw; display: flex; flex-direction: column; justify-content: flex-end; }
+  #chatMessages { display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
+  #chatMessages div { font-size: 9px; line-height: 1.6; color: #fff; text-shadow: 1px 1px 0 #000; background: rgba(0,0,0,.45); padding: 4px 7px; word-wrap: break-word; transition: opacity .6s; }
+  #chatMessages .nick { font-weight: bold; }
+  #chatMessages .nick.r { color: #ff7777; }
+  #chatMessages .nick.b { color: #88a7ff; }
+  #chatMessages .sys { color: #ffff55; }
+  #chatInput { display: none; margin-top: 6px; width: 100%; padding: 9px 8px; font-size: 10px; color: #fff; background: rgba(0,0,0,.65); border: 2px solid #a0a0a0; outline: none; pointer-events: auto; }
+  #chatInput:focus { border-color: #fff; }
+
+  #voiceInd { position: absolute; left: 12px; bottom: 60px; display: none; align-items: center; gap: 8px; background: rgba(0,0,0,.55); border: 2px solid #2c8c2c; padding: 7px 11px; }
+  #voiceInd .dot { width: 10px; height: 10px; background: #44dd44; animation: micPulse .7s infinite alternate; }
+  @keyframes micPulse { from { opacity: .4; } to { opacity: 1; } }
+  #voiceInd span { font-size: 9px; color: #aaffaa; text-shadow: 1px 1px 0 #030; }
+
+  #plantProgress { position: fixed; left: 50%; bottom: 180px; transform: translateX(-50%); display: none; width: 420px; padding: 16px; background: rgba(0,0,0,.85); border: 3px solid #f0ad4e; outline: 2px solid #000; z-index: 80; }
+  #plantProgressLabel { color: #f0ad4e; font-size: 11px; text-align: center; margin-bottom: 10px; text-shadow: 2px 2px 0 #000; letter-spacing: 1px; }
+  #plantProgressBar { width: 100%; height: 22px; background: #222; border: 2px solid #000; overflow: hidden; }
+  #plantProgressFill { width: 0%; height: 100%; background: linear-gradient(90deg, #f0ad4e, #ff6b00); transition: width .05s linear; }
+
+  #bombTimer { position: fixed; top: 120px; left: 50%; transform: translateX(-50%); display: none; font-size: 32px; font-weight: bold; color: #ffaa00; text-shadow: 3px 3px 0 #000; z-index: 80; letter-spacing: 2px; }
+
+  /* ============ ЧИТ-ПАНЕЛЬ (только для moroz) ============ */
+  #cheatPanel {
+    position: fixed; top: 80px; right: 20px; z-index: 85;
+    display: none; flex-direction: column; gap: 8px;
+    background: rgba(20,0,0,.85); border: 2px solid #ff2222;
+    padding: 14px 18px; box-shadow: 0 0 25px rgba(255,34,34,.5);
+  }
+  #cheatPanel .title {
+    color: #ff5555; font-size: 11px; text-align: center;
+    margin-bottom: 8px; letter-spacing: 2px; text-shadow: 2px 2px 0 #000;
+  }
+  #cheatPanel .cheatRow {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 15px; font-size: 9px; color: #ccc;
+  }
+  #cheatPanel .cheatRow .key {
+    background: #333; padding: 3px 8px; border: 1px solid #555;
+    color: #fff; font-weight: bold;
+  }
+  #cheatPanel .cheatRow .val { color: #888; }
+  #cheatPanel .cheatRow.active .val { color: #44ff44; }
+  #cheatPanel .hint { color: #888; font-size: 8px; margin-top: 8px; text-align: center; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- ============ ЭКРАН РЕГИСТРАЦИИ ============ -->
+  <div id="authScreen">
+    <div class="logo">БЛОКАДА</div>
+    <div class="sub">РЕГИСТРАЦИЯ</div>
+    <input id="regName" class="auth-input" maxlength="16" placeholder="Введи свой ник" autocomplete="off">
+    <input id="regPassword" class="auth-input" type="password" maxlength="32" placeholder="Пароль" autocomplete="off">
+    <button id="regBtn" class="auth-btn">ВОЙТИ В ИГРУ</button>
+    <div id="authErr"></div>
+  </div>
+
+  <!-- ============ ГЛАВНОЕ МЕНЮ ============ -->
+  <div id="menu">
+    <div class="logo">БЛОКАДА</div>
+    <div class="splash">Also try Minecraft!</div>
+    <div class="sub">3D ШУТЕР · КРАСНЫЕ ПРОТИВ СИНИХ</div>
+
+    <div id="menuNick">
+      <div class="label">ТВОЙ НИК</div>
+      <div id="menuNickText">—</div>
+    </div>
+
+    <button id="playBtn" class="mc-btn">ИГРАТЬ</button>
+    <button id="logoutBtn" class="mc-btn small">СМЕНИТЬ НИК</button>
+
+    <div class="err" id="menuErr"></div>
+    <div class="hint">
+      WASD — движение · ЛКМ — огонь · ПКМ — прицел<br>
+      1-5 — оружие · ПРОБЕЛ — прыжок · SHIFT — бег · TAB — счёт<br>
+      T — чат · V (зажать) — голос · E — заложить / разминировать бомбу
+    </div>
+    <div class="ver">Blockade v1.3 · made with Cursor</div>
+  </div>
+
+  <div id="teamBanner">
+    <div class="big" id="teamBannerText"></div>
+    <div class="small">Кликни, чтобы захватить мышь</div>
+  </div>
+
+  <div id="roundWin">
+    <div class="winText" id="roundWinText"></div>
+    <div class="winSub" id="roundWinSub"></div>
+  </div>
+
+  <div id="hud">
+    <div id="dmgVignette"></div>
+    <div id="crosshair"></div>
+    <div id="hitmarker"></div>
+    <div id="scoreTop">
+      <span class="red" id="scoreRed">0</span>
+      <span class="vs">КРАСНЫЕ vs СИНИЕ</span>
+      <span class="blue" id="scoreBlue">0</span>
+    </div>
+    <div id="killfeed"></div>
+    <div id="hearts"></div>
+    <div id="hotbar"></div>
+    <div id="ammo">
+      <div class="num" id="ammoNum">30 / 30</div>
+      <div class="wname" id="weaponName">АВТОМАТ</div>
+      <div class="rel" id="reloadLbl">ПЕРЕЗАРЯДКА...</div>
+    </div>
+
+    <div id="plantProgress">
+      <div id="plantProgressLabel">ЗАКЛАДКА БОМБЫ 0%</div>
+      <div id="plantProgressBar">
+        <div id="plantProgressFill"></div>
+      </div>
+    </div>
+    <div id="bombTimer">💣 40.0с</div>
+
+    <div id="deathScreen">
+      <div class="t">ВЫ ПОГИБЛИ</div>
+      <div class="by" id="deathBy"></div>
+      <div class="cd" id="deathCd"></div>
+    </div>
+    <div id="scoreboard"></div>
+    <div id="pauseHint">
+      <div class="t">ПАУЗА</div>
+      <div class="c">ЛКМ — огонь · ПКМ — прицел<br>R — перезарядка · 1 автомат · 2 дробовик · 3 винтовка<br>4 блоки · 5 кирка · E — бомба<br>TAB — счёт · T — чат · V (зажать) — голос</div>
+      <button class="mc-btn" id="resumeBtn">ВЕРНУТЬСЯ В ИГРУ</button>
+    </div>
+    <div id="respawnFlash"></div>
+    <div id="chat">
+      <div id="chatMessages"></div>
+      <input id="chatInput" maxlength="120" placeholder="Сообщение..." autocomplete="off">
+    </div>
+    <div id="voiceInd"><div class="dot"></div><span>МИКРОФОН ВКЛЮЧЁН</span></div>
+
+    <!-- ============ ЧИТ-ПАНЕЛЬ ============ -->
+    <div id="cheatPanel">
+      <div class="title">ЧИТ-ПАНЕЛЬ · MOROZ</div>
+      <div class="cheatRow" id="cheatAim">
+        <span>🎯 Aimbot</span>
+        <span class="key">X</span>
+        <span class="val" id="cheatAimVal">OFF</span>
+      </div>
+      <div class="cheatRow" id="cheatWall">
+        <span>👁 Wallhack</span>
+        <span class="key">Z</span>
+        <span class="val" id="cheatWallVal">OFF</span>
+      </div>
+      <div class="hint">X — автонаведение на врага<br>Z — видеть врагов сквозь стены</div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+  </script>
+  <script type="module" src="js/game.js"></script>
+</body>
+</html>
