@@ -69,6 +69,7 @@ let matchScore = { red: 0, blue: 0 };
 let roundTimeLeft = 115000;
 let buyTimeLeft = 15000;
 let inBuyPhase = false;
+let currentMode = 'classic';
 
 const me = {
   pos: new THREE.Vector3(0, 1.05, 0),
@@ -82,10 +83,12 @@ const me = {
   ammo: { rifle: 30, shotgun: 6, sniper: 5, deagle: 7 },
   weapons: { rifle: true, shotgun: false, sniper: false, deagle: false },
   weapon: 'rifle',
+  grenades: { he: 1, flash: 1, smoke: 1 },
   blocks: 64,
   reloading: false,
   lastShot: 0,
   zoomed: false,
+  flashing: 0,
 };
 
 const keys = {};
@@ -97,6 +100,12 @@ let chatOpen = false;
 let buyMenuOpen = false;
 
 const tracers = [], particles = [];
+
+// ============ ГРАНАТЫ ============
+const grenades = [];
+const activeSmokes = new Map();
+let throwing = false;
+let throwingType = null;
 
 let activeBomb = null;
 let bombMesh = null;
@@ -111,24 +120,14 @@ let defuseDuration = 5000;
 let defuseProgressInterval = null;
 
 // ============================================================
-// ЧИТЫ (только для moroz)
+// ЧИТЫ
 // ============================================================
 let isCheater = false;
 const cheats = {
-  aimbot: false,
-  wallhack: false,
-  speedhack: false,
-  noclip: false,
-  infiniteAmmo: false,
-  infiniteHp: false,
-  rapidFire: false,
-  autoHeadshot: false,
-  fullBright: false,
-  oneShot: false,
-  freeBuy: false,
-  instantPlant: false,
-  instantDefuse: false,
-  chams: false,
+  aimbot: false, wallhack: false, speedhack: false, noclip: false,
+  infiniteAmmo: false, infiniteHp: false, rapidFire: false,
+  autoHeadshot: false, fullBright: false, oneShot: false,
+  freeBuy: false, instantPlant: false, instantDefuse: false, chams: false,
 };
 const cheatESP = new Map();
 let cheatsMenuOpen = false;
@@ -285,9 +284,9 @@ function updateBuyMenu() {
   $('buyMoneyVal').textContent = cheats.freeBuy ? '∞' : me.money;
   document.querySelectorAll('#buyMenu .buyItem').forEach(el => {
     const item = el.dataset.item;
-    const prices = { rifle: 2700, shotgun: 1200, sniper: 4750, deagle: 700, armor: 1000, he: 300 };
+    const prices = { rifle: 2700, shotgun: 1200, sniper: 4750, deagle: 700, armor: 1000, he: 300, flash: 200, smoke: 300 };
     const price = prices[item];
-    const owned = me.weapons[item] || (item === 'armor' && me.armor > 0);
+    const owned = me.weapons[item] || (item === 'armor' && me.armor > 0) || (me.grenades && me.grenades[item] > 0);
     const disabled = !cheats.freeBuy && (me.money < price || owned);
     el.classList.toggle('disabled', disabled);
     if (owned) {
@@ -303,8 +302,8 @@ function buyItem(item) {
   if (!inBuyPhase && !cheats.freeBuy) { SND.error(); sysChat('⚠️ Закупка только в начале раунда!'); return; }
   if (!item) return;
   if (cheats.freeBuy) {
-    // Мгновенно выдаём
     if (item === 'armor') me.armor = 100;
+    else if (item === 'he' || item === 'flash' || item === 'smoke') { me.grenades[item] = 1; updateGrenadeHud(); }
     else { me.weapons[item] = true; me.weapon = item; me.slot = SLOTS.indexOf(item); }
     updateBuyMenu(); updateHealthHud(); updateAmmoHud(); updateHotbar();
     SND.buy();
@@ -314,7 +313,7 @@ function buyItem(item) {
 }
 
 // ============================================================
-// Cheat Menu UI
+// Cheat Menu
 // ============================================================
 function openCheatMenu() {
   if (!isCheater) return;
@@ -341,6 +340,7 @@ function toggleCheat(name) {
   cheats[name] = !cheats[name];
   updateCheatMenu();
   updateCheatPanel();
+  if (name === 'fullBright') applyFullBright();
   sysChat(`[ЧИТ] ${name}: ${cheats[name] ? 'ВКЛ' : 'ВЫКЛ'}`);
 }
 function updateCheatPanel() {
@@ -362,6 +362,15 @@ function updateCheatPanel() {
     list.appendChild(div);
   }
 }
+function applyFullBright() {
+  if (!scene) return;
+  scene.traverse(o => {
+    if (o.isLight) {
+      if (o.isAmbientLight) o.intensity = cheats.fullBright ? 2.5 : 0.75;
+      if (o.isDirectionalLight) o.intensity = cheats.fullBright ? 1.0 : 1.6;
+    }
+  });
+}
 
 // ============================================================
 // Networking
@@ -375,7 +384,7 @@ function connect(name, password) {
   ws.onclose = () => {
     if (inGame) {
       inGame = false;
-      closeChat(); closeAllVoice();
+      closeChat();
       document.exitPointerLock();
       $('hud').style.display = 'none';
       $('menu').style.display = 'flex';
@@ -398,6 +407,7 @@ function handleMsg(m) {
     case 'welcome': {
       myId = m.id; myTeam = m.team;
       isCheater = !!m.cheater;
+      currentMode = m.gameMode || 'classic';
       me.pos.set(m.pos.x, m.pos.y, m.pos.z);
       me.ry = m.ry; me.rx = 0;
       me.money = m.money || 800;
@@ -407,11 +417,11 @@ function handleMsg(m) {
       for (const d of m.destroyed || []) removeBlockLocal(d.x, d.y, d.z, true);
       for (const b of m.placed) placeBlockLocal(b.x, b.y, b.z, b.team);
       startGame();
-      initVoice();
-      if (SETTINGS.mobile) initMobileControls();
       updateMoneyHud(); updateHealthHud(); updateMatchScoreHud();
+      updateGrenadeHud();
+      $('modeIndicator').textContent = 'РЕЖИМ: ' + (currentMode === 'arena' ? '1v1 ARENA' : 'CLASSIC');
       if (isCheater) {
-        sysChat('🔥 ЧИТ-ПАНЕЛЬ АКТИВНА. Нажми ПРАВЫЙ CTRL для меню.');
+        sysChat('🔥 ЧИТ-ПАНЕЛЬ АКТИВНА. Правый CTRL — меню.');
         updateCheatPanel();
       }
       break;
@@ -420,7 +430,6 @@ function handleMsg(m) {
     case 'leave': {
       const r = remotes.get(m.id);
       if (r) { scene.remove(r.group); remotes.delete(m.id); }
-      closeVoicePeer(m.id);
       break;
     }
     case 'states':
@@ -486,8 +495,10 @@ function handleMsg(m) {
         me.hp = 100; me.armor = m.armor || 0; me.dead = false;
         me.ammo = { rifle: 30, shotgun: 6, sniper: 5, deagle: 7 };
         me.blocks = 64; me.reloading = false;
+        me.flashing = 0;
+        me.grenades = { he: 1, flash: 1, smoke: 1 };
         me.ry = myTeam === 'red' ? -Math.PI / 2 : Math.PI / 2; me.rx = 0;
-        updateHealthHud(); updateAmmoHud(); updateHotbar();
+        updateHealthHud(); updateAmmoHud(); updateHotbar(); updateGrenadeHud();
         $('deathScreen').style.display = 'none';
         const f = $('respawnFlash');
         f.style.opacity = 0.8; f.style.transition = 'none';
@@ -501,7 +512,41 @@ function handleMsg(m) {
     }
     case 'place': placeBlockLocal(m.x, m.y, m.z, m.team); break;
     case 'destroy': removeBlockLocal(m.x, m.y, m.z); break;
-    case 'rtc': handleRtcSignal(m.from, m.data); break;
+
+    // ============ ГРАНАТЫ ============
+    case 'grenadesUpdate':
+      if (me.grenades) {
+        me.grenades.he = m.grenades.he;
+        me.grenades.flash = m.grenades.flash;
+        me.grenades.smoke = m.grenades.smoke;
+        updateGrenadeHud();
+      }
+      break;
+    case 'grenadeThrown':
+      spawnGrenadeMesh(m.type, m.from, m.vel);
+      break;
+    case 'grenadeExplode':
+      explodeGrenadeLocal(m.x, m.y, m.z, m.type);
+      break;
+    case 'flash':
+      me.flashing = m.duration;
+      applyFlash();
+      break;
+    case 'smokeStart':
+      spawnSmokeLocal(m.x, m.y, m.z, m.duration);
+      break;
+    case 'smokeEnd':
+      break;
+
+    // ============ РЕЖИМ ============
+    case 'modeChanged':
+      currentMode = m.mode;
+      $('modeIndicator').textContent = 'РЕЖИМ: ' + (m.mode === 'arena' ? '1v1 ARENA' : 'CLASSIC');
+      sysChat('🎮 Режим: ' + (m.mode === 'arena' ? '1v1 ARENA' : 'CLASSIC'));
+      document.querySelectorAll('#modeSelect button').forEach(b => b.classList.toggle('active', b.dataset.mode === m.mode));
+      break;
+
+    // ============ РАУНДЫ ============
     case 'roundStart':
       matchScore = m.matchScore || matchScore;
       roundTimeLeft = m.roundTime || 115000;
@@ -547,14 +592,17 @@ function handleMsg(m) {
       matchScore = { red: 0, blue: 0 };
       updateMatchScoreHud();
       break;
+
     case 'bought':
       me.money = m.money;
       me.armor = m.armor;
       me.weapons = m.weapons || me.weapons;
-      updateMoneyHud(); updateHealthHud(); updateBuyMenu();
+      if (m.grenades) me.grenades = m.grenades;
+      updateMoneyHud(); updateHealthHud(); updateBuyMenu(); updateGrenadeHud();
       SND.buy();
       break;
     case 'buyError': sysChat('⚠️ ' + m.text); SND.error(); break;
+
     case 'plantStarted': plantDuration = cheats.instantPlant ? 100 : (m.duration || 3000); break;
     case 'plantCancelled':
       planting = false;
@@ -622,6 +670,12 @@ function updateTimerHud() {
   el.classList.toggle('warning', roundTimeLeft < 20000 && !inBuyPhase);
   $('phaseText').textContent = inBuyPhase ? 'ЗАКУПКА · ' + Math.max(0, Math.ceil(buyTimeLeft / 1000)) + 'с' : 'В БОЮ';
 }
+function updateGrenadeHud() {
+  if (!me.grenades) me.grenades = { he: 0, flash: 0, smoke: 0 };
+  $('gHE')?.classList.toggle('empty', me.grenades.he <= 0);
+  $('gFlash')?.classList.toggle('empty', me.grenades.flash <= 0);
+  $('gSmoke')?.classList.toggle('empty', me.grenades.smoke <= 0);
+}
 
 // ============================================================
 // Chat
@@ -658,35 +712,6 @@ function sysChat(text) {
   box.appendChild(div);
   while (box.children.length > 8) box.firstChild.remove();
   setTimeout(() => { div.style.opacity = 0; setTimeout(() => div.remove(), 600); }, 9000);
-}
-
-// ============================================================
-// Voice (упрощённо)
-// ============================================================
-const voicePeers = new Map();
-let micStream = null, micTrack = null, voiceFailed = false;
-
-async function initVoice() {
-  if (!micStream && !voiceFailed) {
-    try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-      micTrack = micStream.getAudioTracks()[0];
-      micTrack.enabled = false;
-      sysChat('🎤 V — говорить');
-    } catch { voiceFailed = true; }
-  }
-}
-function makeVoicePeer() {}
-function handleRtcSignal() {}
-function closeVoicePeer() {}
-function closeAllVoice() {
-  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micTrack = null; }
-  setTalking(false);
-}
-function setTalking(on) {
-  if (!micTrack) on = false;
-  if (micTrack) micTrack.enabled = on;
-  $('voiceInd').style.display = on ? 'flex' : 'none';
 }
 
 // ============================================================
@@ -837,7 +862,7 @@ function updateRemotes(dt) {
 }
 
 // ============================================================
-// ЧИТЫ — ФУНКЦИИ
+// ЧИТЫ
 // ============================================================
 function runAimbot() {
   if (!cheats.aimbot || !isCheater) return;
@@ -872,11 +897,9 @@ function updateWallhack() {
     alive.add(r.id);
     let esp = cheatESP.get(r.id);
     if (!esp) {
-      const geo = cheats.chams
-        ? new THREE.BoxGeometry(0.9, 2.1, 0.9)
-        : new THREE.BoxGeometry(1.2, 2.6, 1.2);
+      const geo = cheats.chams ? new THREE.BoxGeometry(0.9, 2.1, 0.9) : new THREE.BoxGeometry(1.2, 2.6, 1.2);
       const mat = cheats.chams
-        ? new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: false, depthTest: false })
+        ? new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false })
         : new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true, transparent: true, opacity: 0.9, depthTest: false });
       esp = new THREE.Mesh(geo, mat);
       esp.renderOrder = 999;
@@ -1105,6 +1128,110 @@ function tryBreakBlock() {
 }
 
 // ============================================================
+// GRENADES
+// ============================================================
+function startThrowGrenade(type) {
+  if (me.dead) return;
+  if (!me.grenades || !me.grenades[type] || me.grenades[type] <= 0) { sysChat('Нет гранат'); SND.error(); return; }
+  throwing = true;
+  throwingType = type;
+  sysChat(`Бросаю ${type.toUpperCase()}...`);
+}
+function releaseThrowGrenade() {
+  if (!throwing || !throwingType) return;
+  const type = throwingType;
+  throwing = false;
+  throwingType = null;
+  const origin = camera.getWorldPosition(new THREE.Vector3());
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  const speed = 20;
+  const vx = dir.x * speed;
+  const vy = dir.y * speed + 4;
+  const vz = dir.z * speed;
+  netSend({
+    t: 'throwGrenade', type,
+    x: origin.x + dir.x * 0.5,
+    y: origin.y + dir.y * 0.5,
+    z: origin.z + dir.z * 0.5,
+    vx, vy, vz,
+  });
+  spawnGrenadeMesh(type, { x: origin.x + dir.x * 0.5, y: origin.y + dir.y * 0.5, z: origin.z + dir.z * 0.5 }, { x: vx, y: vy, z: vz });
+}
+function spawnGrenadeMesh(type, from, vel) {
+  const colors = { he: 0xff6644, flash: 0xffee44, smoke: 0x66aaff };
+  const geo = new THREE.SphereGeometry(0.15, 8, 8);
+  const mat = new THREE.MeshBasicMaterial({ color: colors[type] || 0xffffff });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(from.x, from.y, from.z);
+  scene.add(mesh);
+  grenades.push({
+    mesh, type,
+    x: from.x, y: from.y, z: from.z,
+    vx: vel.x, vy: vel.y, vz: vel.z,
+    ttl: 3,
+  });
+}
+function updateGrenadesClient(dt) {
+  for (let i = grenades.length - 1; i >= 0; i--) {
+    const g = grenades[i];
+    g.ttl -= dt;
+    g.vy -= 23 * dt;
+    g.x += g.vx * dt;
+    g.y += g.vy * dt;
+    g.z += g.vz * dt;
+    if (g.y < 0.2) {
+      g.y = 0.2;
+      g.vy = 0;
+      g.vx *= 0.7;
+      g.vz *= 0.7;
+    }
+    g.mesh.position.set(g.x, g.y, g.z);
+    if (g.ttl <= 0) {
+      scene.remove(g.mesh);
+      g.mesh.geometry.dispose();
+      g.mesh.material.dispose();
+      grenades.splice(i, 1);
+    }
+  }
+}
+function explodeGrenadeLocal(x, y, z, type) {
+  const pos = new THREE.Vector3(x, y, z);
+  if (type === 'he') {
+    burst(pos, 0xff7722, 30, 12);
+    burst(pos, 0xffcc44, 20, 10);
+    if (pos.distanceTo(me.pos) < 20) SND.boom(Math.max(0.1, 1 - pos.distanceTo(me.pos) / 20));
+  } else if (type === 'flash') {
+    burst(pos, 0xffee44, 40, 15);
+    tone(1200, 0.3, 0.3, 'square');
+  } else if (type === 'smoke') {
+    burst(pos, 0x888888, 30, 5);
+  }
+}
+function applyFlash() {
+  const overlay = $('flashOverlay');
+  if (!overlay) return;
+  overlay.style.opacity = Math.min(1, me.flashing / 3000);
+  const iv = setInterval(() => {
+    me.flashing = Math.max(0, me.flashing - 100);
+    overlay.style.opacity = Math.min(1, me.flashing / 3000);
+    if (me.flashing <= 0) { clearInterval(iv); overlay.style.opacity = 0; }
+  }, 100);
+}
+function spawnSmokeLocal(x, y, z, duration) {
+  const geo = new THREE.SphereGeometry(4, 16, 16);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.85 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, y + 2, z);
+  scene.add(mesh);
+  setTimeout(() => {
+    scene.remove(mesh);
+    mesh.geometry.dispose();
+    mesh.material.dispose();
+  }, duration);
+}
+
+// ============================================================
 // FX
 // ============================================================
 function spawnTracer(origin, dir, wkey, dist) {
@@ -1255,71 +1382,10 @@ function selectSlot(i) {
 }
 
 // ============================================================
-// HUD
+// HUD helpers
 // ============================================================
-function drawIcon(kind) {
-  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
-  const g = c.getContext('2d');
-  g.imageSmoothingEnabled = false;
-  if (kind === 'blocks') {
-    const cols = myTeam === 'red' ? ['#b03430','#a32e2a','#bd3d38'] : ['#3a4fb4','#3448a6','#4458c2'];
-    for (let y = 10; y < 54; y++) for (let x = 10; x < 54; x++) {
-      g.fillStyle = cols[Math.floor(Math.random() * cols.length)];
-      g.fillRect(x, y, 1, 1);
-    }
-    g.strokeStyle = '#000'; g.lineWidth = 2; g.strokeRect(10, 10, 44, 44);
-    return c.toDataURL();
-  }
-  if (kind === 'pickaxe') {
-    g.fillStyle = '#6e4f2a';
-    for (let i = 0; i < 30; i++) g.fillRect(14 + i, 48 - i, 4, 4);
-    g.fillStyle = '#7a7a7a';
-    g.fillRect(10, 12, 12, 8); g.fillRect(18, 8, 16, 8); g.fillRect(32, 8, 12, 8); g.fillRect(42, 12, 10, 8); g.fillRect(48, 18, 8, 10);
-    g.fillStyle = '#9a9a9a'; g.fillRect(18, 10, 24, 4);
-    return c.toDataURL();
-  }
-  g.fillStyle = '#222';
-  if (kind === 'rifle') {
-    g.fillRect(4, 28, 48, 10); g.fillRect(48, 30, 12, 6);
-    g.fillStyle = '#444'; g.fillRect(20, 38, 8, 14);
-    g.fillStyle = '#6e4f2a'; g.fillRect(4, 26, 12, 16);
-    g.fillStyle = '#444'; g.fillRect(32, 22, 12, 6);
-  } else if (kind === 'shotgun') {
-    g.fillStyle = '#6e4f2a'; g.fillRect(4, 28, 20, 14);
-    g.fillStyle = '#222'; g.fillRect(20, 28, 40, 8);
-    g.fillStyle = '#555'; g.fillRect(28, 36, 14, 8);
-  } else if (kind === 'sniper') {
-    g.fillRect(4, 32, 56, 6);
-    g.fillStyle = '#444'; g.fillRect(16, 22, 16, 8);
-    g.fillStyle = '#6e4f2a'; g.fillRect(4, 30, 10, 14);
-    g.fillStyle = '#555'; g.fillRect(24, 38, 6, 10);
-  } else if (kind === 'deagle') {
-    g.fillRect(16, 22, 20, 20); g.fillRect(36, 26, 16, 8);
-    g.fillStyle = '#444'; g.fillRect(20, 42, 12, 8);
-  }
-  return c.toDataURL();
-}
 function updateHotbar() {
-  const bar = $('hotbar');
-  if (!bar) return;
-  bar.innerHTML = '';
-  SLOTS.forEach((s, i) => {
-    const div = document.createElement('div');
-    div.className = 'slot' + (i === me.slot ? ' sel' : '');
-    const img = document.createElement('img');
-    img.src = drawIcon(s);
-    div.appendChild(img);
-    const key = document.createElement('span');
-    key.className = 'key'; key.textContent = i + 1;
-    div.appendChild(key);
-    if (s === 'blocks') {
-      const cnt = document.createElement('span');
-      cnt.className = 'cnt'; cnt.textContent = me.blocks;
-      div.appendChild(cnt);
-    }
-    div.addEventListener('click', () => selectSlot(i));
-    bar.appendChild(div);
-  });
+  // В новом HUD hotbar отсутствует — оставлено для совместимости
 }
 function updateAmmoHud() {
   const wkey = me.weapon || 'rifle';
@@ -1359,7 +1425,7 @@ function updateScoreboard() {
 }
 
 // ============================================================
-// Радар
+// Radar
 // ============================================================
 function updateRadar() {
   const canvas = $('radarCanvas');
@@ -1377,8 +1443,7 @@ function updateRadar() {
   ctx.save();
   ctx.translate(cx, cy);
   for (const r of remotes.values()) {
-    if (!r.alive) continue;
-    if (r.team === myTeam) continue;
+    if (!r.alive || r.team === myTeam) continue;
     const dx = r.group.position.x - me.pos.x;
     const dz = r.group.position.z - me.pos.z;
     const cs = Math.cos(-me.ry), sn = Math.sin(-me.ry);
@@ -1407,7 +1472,7 @@ function updateRadar() {
 }
 
 // ============================================================
-// Бомба
+// Bomb
 // ============================================================
 function spawnBombMesh() {
   if (bombMesh) scene.remove(bombMesh);
@@ -1504,7 +1569,7 @@ function showDefuseProgress() {
 }
 
 // ============================================================
-// Мобильное
+// Mobile
 // ============================================================
 function initMobileControls() {
   if (mobileInited) return;
@@ -1596,7 +1661,7 @@ function setupInput() {
     }
     if (buyMenuOpen) {
       if (e.code === 'KeyB' || e.code === 'Escape') { e.preventDefault(); closeBuyMenu(); return; }
-      const map = { Digit1: 'rifle', Digit2: 'shotgun', Digit3: 'sniper', Digit4: 'deagle', Digit5: 'armor', Digit6: 'he' };
+      const map = { Digit1: 'rifle', Digit2: 'shotgun', Digit3: 'sniper', Digit4: 'deagle', Digit5: 'armor', Digit6: 'he', Digit7: 'flash', Digit8: 'smoke' };
       if (map[e.code]) { e.preventDefault(); buyItem(map[e.code]); }
       return;
     }
@@ -1613,18 +1678,19 @@ function setupInput() {
       if (activeBomb) startDefuse();
       else if (!planting) startPlant();
     }
-    // Читерские клавиши
+    // ГРАНАТЫ (для всех)
+    if (e.code === 'KeyG' && !e.repeat) { e.preventDefault(); startThrowGrenade('he'); }
+    if (e.code === 'KeyF' && !e.repeat) { e.preventDefault(); startThrowGrenade('flash'); }
+    if (e.code === 'KeyC' && !e.repeat) { e.preventDefault(); startThrowGrenade('smoke'); }
+    // ЧИТЫ
     if (isCheater) {
       if (e.code === 'KeyX') { e.preventDefault(); toggleCheat('aimbot'); }
       if (e.code === 'KeyZ') { e.preventDefault(); toggleCheat('wallhack'); }
-      if (e.code === 'KeyC') { e.preventDefault(); toggleCheat('speedhack'); }
       if (e.code === 'KeyN') { e.preventDefault(); toggleCheat('noclip'); }
       if (e.code === 'KeyH') { e.preventDefault(); toggleCheat('infiniteHp'); }
       if (e.code === 'KeyJ') { e.preventDefault(); toggleCheat('chams'); }
-      if (e.code === 'KeyL') { e.preventDefault(); toggleCheat('fullBright'); applyFullBright(); }
+      if (e.code === 'KeyL') { e.preventDefault(); toggleCheat('fullBright'); }
       if (e.code === 'KeyK') { e.preventDefault(); toggleCheat('oneShot'); }
-      if (e.code === 'KeyF') { e.preventDefault(); toggleCheat('instantDefuse'); }
-      if (e.code === 'KeyG') { e.preventDefault(); toggleCheat('instantPlant'); }
       if (e.code === 'KeyU') { e.preventDefault(); toggleCheat('infiniteAmmo'); }
       if (e.code === 'KeyI') { e.preventDefault(); toggleCheat('rapidFire'); }
       if (e.code === 'KeyO') { e.preventDefault(); toggleCheat('freeBuy'); updateMoneyHud(); }
@@ -1637,10 +1703,14 @@ function setupInput() {
     if (chatOpen) return;
     keys[e.code] = false;
     if (e.code === 'Tab') { tabHeld = false; updateScoreboard(); }
+    // Бросок гранаты при отпускании
+    if ((e.code === 'KeyG' || e.code === 'KeyF' || e.code === 'KeyC') && throwing) {
+      releaseThrowGrenade();
+    }
   });
   document.addEventListener('mousemove', e => {
     if (!locked || me.dead || buyMenuOpen || cheatsMenuOpen) return;
-    if (cheats.aimbot && isCheater) return; // aimbot перебивает
+    if (cheats.aimbot && isCheater) return;
     me.ry -= e.movementX * 0.0023 * SETTINGS.sensitivity;
     me.rx -= e.movementY * 0.0023 * SETTINGS.sensitivity * (me.zoomed ? 0.5 : 1);
     me.rx = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, me.rx));
@@ -1673,19 +1743,17 @@ function setupInput() {
   document.querySelectorAll('#cheatMenu .cheatItem').forEach(el => {
     el.addEventListener('click', () => toggleCheat(el.dataset.cheat));
   });
-  const closeCheatBtn = $('cheatMenuClose');
-  if (closeCheatBtn) closeCheatBtn.addEventListener('click', closeCheatMenu);
-}
-function applyFullBright() {
-  if (!scene) return;
-  if (cheats.fullBright) {
-    scene.traverse(o => {
-      if (o.isLight) {
-        if (o.isAmbientLight) o.intensity = 2.0;
-        if (o.isDirectionalLight) o.intensity = 1.0;
-      }
+  document.getElementById('cheatMenuClose')?.addEventListener('click', closeCheatMenu);
+  document.getElementById('cheatMenuBtn')?.addEventListener('click', openCheatMenu);
+  document.querySelectorAll('#modeSelect button').forEach(b => {
+    b.addEventListener('click', () => {
+      if (!isCheater) return;
+      netSend({ t: 'setMode', mode: b.dataset.mode });
     });
-  }
+  });
+}
+function setTalking(on) {
+  $('voiceInd').style.display = on ? 'flex' : 'none';
 }
 
 // ============================================================
@@ -1730,14 +1798,16 @@ function startGame() {
   setTimeout(() => { $('teamBanner').style.display = 'none'; }, 2500);
   buildViewModels();
   updateHealthHud(); updateMoneyHud(); updateHotbar(); updateAmmoHud();
-  updateMatchScoreHud(); updateTimerHud();
+  updateMatchScoreHud(); updateTimerHud(); updateGrenadeHud();
   if (isCheater) {
     $('cheatPanel').style.display = 'flex';
     $('cheatMenuBtn').style.display = 'block';
+    $('modeSelect').style.display = 'flex';
     updateCheatPanel();
   } else {
     $('cheatPanel').style.display = 'none';
     $('cheatMenuBtn').style.display = 'none';
+    $('modeSelect').style.display = 'none';
   }
   if (SETTINGS.mobile) initMobileControls();
   SND.spawn();
@@ -1773,6 +1843,7 @@ function loop() {
     camera.updateProjectionMatrix();
     updateRemotes(dt);
     updateFx(dt);
+    updateGrenadesClient(dt);
     updateViewModel(dt, moving > 0);
     updateWallhack();
     if (tabHeld) updateScoreboard();
