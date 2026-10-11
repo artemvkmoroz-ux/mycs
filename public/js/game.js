@@ -14,7 +14,6 @@ const WEAPONS = {
   sniper:  { name: 'AWP',      dmg: 70, rate: 1400, mag: 5,  reload: 2400, spread: 0.002, auto: false, pellets: 1, range: 140 },
   deagle:  { name: 'DEAGLE',   dmg: 45, rate: 400,  mag: 7,  reload: 2000, spread: 0.01,  auto: false, pellets: 1, range: 100 },
   blocks:  { name: 'БЛОКИ',    builder: true },
-  pickaxe: { name: 'КИРКА',    tool: true, auto: true },
 };
 const SLOTS = ['rifle', 'shotgun', 'sniper', 'blocks', 'pickaxe'];
 const TEAM_RU = { red: 'КРАСНЫХ', blue: 'СИНИХ' };
@@ -63,13 +62,20 @@ let tex, mats;
 const collision = new Set();
 const placedMeshes = new Map();
 const mapBlockIndex = new Map();
-let ws = null, myId = -1, myTeam = 'red', myName = '';
+let ws = null, myId = -1, myUserId = null, myTeam = 'red', myName = '';
 const remotes = new Map();
 let matchScore = { red: 0, blue: 0 };
 let roundTimeLeft = 115000;
 let buyTimeLeft = 15000;
 let inBuyPhase = false;
 let currentMode = 'classic';
+let selectedMode = 'classic';
+
+// Друзья и лобби
+let friendsList = [];
+let friendRequests = [];
+let lobbiesList = [];
+let myLobby = null;
 
 const me = {
   pos: new THREE.Vector3(0, 1.05, 0),
@@ -101,9 +107,8 @@ let buyMenuOpen = false;
 
 const tracers = [], particles = [];
 
-// ============ ГРАНАТЫ ============
+// Гранаты
 const grenades = [];
-const activeSmokes = new Map();
 let throwing = false;
 let throwingType = null;
 
@@ -119,9 +124,7 @@ let defuseStartTime = 0;
 let defuseDuration = 5000;
 let defuseProgressInterval = null;
 
-// ============================================================
-// ЧИТЫ
-// ============================================================
+// Читы
 let isCheater = false;
 const cheats = {
   aimbot: false, wallhack: false, speedhack: false, noclip: false,
@@ -192,6 +195,7 @@ const SND = {
   lose: () => { tone(440, 0.2, 0.18, 'sawtooth', -100); setTimeout(() => tone(330, 0.35, 0.18, 'sawtooth', -100), 200); },
   buy: () => { tone(880, 0.05, 0.15, 'square'); setTimeout(() => tone(1100, 0.08, 0.15, 'square'), 50); },
   error: () => tone(180, 0.15, 0.2, 'sawtooth', -60),
+  notif: () => { tone(660, 0.06, 0.12, 'square'); setTimeout(() => tone(880, 0.08, 0.12, 'square'), 60); },
 };
 
 // ============================================================
@@ -222,30 +226,29 @@ function setupAuth() {
 function showMenu(name) {
   $('authScreen').style.display = 'none';
   $('settings').style.display = 'none';
+  $('playModal').classList.remove('active');
   $('menu').style.display = 'flex';
   $('menuNickText').textContent = name;
   $('menuNickBig').textContent = name.toUpperCase();
   $('userAvatar').textContent = name.charAt(0).toUpperCase();
   $('playBtn').disabled = false;
+  if (ws && ws.readyState === 1) {
+    // Уже подключён — обновляем друзей/лобби
+    netSend({ t: 'refreshLists' });
+  }
 }
 function showAuth() {
   $('authScreen').style.display = 'flex';
   $('menu').style.display = 'none';
   $('settings').style.display = 'none';
+  $('playModal').classList.remove('active');
 }
 function setupMenu() {
-  const err = $('menuErr');
-  const startConnect = () => {
-    const name = $('menuNickBig').textContent;
-    const pass = localStorage.getItem('blockade_password') || '';
-    if (!name || name === '—') { err.textContent = 'Введи ник!'; return; }
-    if (!pass) { err.textContent = 'Введи пароль!'; return; }
-    err.textContent = '';
-    $('playBtn').disabled = true;
-    connect(name, pass);
-  };
-  $('playBtn').addEventListener('click', startConnect);
-  $('quickPlayBtn').addEventListener('click', startConnect);
+  $('playBtn').addEventListener('click', () => openPlayModal());
+  $('quickPlayBtn').addEventListener('click', () => {
+    selectedMode = 'classic';
+    connectAndPlay();
+  });
   $('logoutBtn').addEventListener('click', () => showAuth());
   $('settingsBtn').addEventListener('click', () => {
     $('menu').style.display = 'none';
@@ -262,6 +265,458 @@ function setupMenu() {
   $('sensRange').addEventListener('input', e => { SETTINGS.sensitivity = parseFloat(e.target.value); saveSettings(); });
   $('volRange').addEventListener('input', e => { SETTINGS.volume = parseInt(e.target.value) / 100; saveSettings(); });
   $('qualitySelect').addEventListener('change', e => { SETTINGS.quality = e.target.value; saveSettings(); });
+}
+
+// ============================================================
+// Play Modal
+// ============================================================
+function openPlayModal() {
+  $('playModal').classList.add('active');
+  updateModalUI();
+}
+function closePlayModal() {
+  $('playModal').classList.remove('active');
+}
+function updateModalUI() {
+  document.querySelectorAll('#playModal .modeCard').forEach(el => {
+    el.classList.toggle('active', el.dataset.mode === selectedMode);
+  });
+  renderFriendsInModal();
+}
+function renderFriendsInModal() {
+  const list = $('friendsList');
+  if (!list) return;
+  if (!friendsList.length && !friendRequests.length) {
+    list.innerHTML = '<div style="text-align:center;color:#666;font-size:12px;padding:20px;">Пока нет друзей. Добавь кого-нибудь!</div>';
+    return;
+  }
+  let html = '';
+  if (friendRequests.length) {
+    html += '<div style="font-size:10px;color:#f0ad4e;letter-spacing:2px;margin-bottom:8px;">ЗАЯВКИ В ДРУЗЬЯ</div>';
+    for (const r of friendRequests) {
+      html += `
+        <div class="friendRow">
+          <div class="friendInfo">
+            <div class="friendStatus online"></div>
+            <div class="friendName">${r.name}</div>
+          </div>
+          <div class="notifActions">
+            <button class="accept" onclick="acceptFriend('${r.id}')">✓</button>
+            <button class="decline" onclick="declineFriend('${r.id}')">×</button>
+          </div>
+        </div>`;
+    }
+    html += '<div style="height:1px;background:rgba(255,255,255,.08);margin:12px 0;"></div>';
+  }
+  if (friendsList.length) {
+    for (const f of friendsList) {
+      html += `
+        <div class="friendRow">
+          <div class="friendInfo">
+            <div class="friendStatus ${f.online ? 'online' : 'offline'}"></div>
+            <div class="friendName">${f.name}${f.inLobby ? ' 🚪' : ''}</div>
+          </div>
+          <button class="friendInvite" onclick="inviteFriend('${f.id}')" ${!f.online ? 'disabled' : ''}>Пригласить</button>
+        </div>`;
+    }
+  }
+  list.innerHTML = html;
+}
+
+// ============================================================
+// Networking
+// ============================================================
+function connectAndPlay() {
+  const name = $('menuNickBig').textContent;
+  const pass = localStorage.getItem('blockade_password') || '';
+  if (!name || name === '—') { $('menuErr').textContent = 'Введи ник!'; return; }
+  if (!pass) { $('menuErr').textContent = 'Введи пароль!'; return; }
+  $('menuErr').textContent = '';
+  closePlayModal();
+  if (ws && ws.readyState === 1) {
+    // Уже подключён — просто шлём setMode
+    netSend({ t: 'setMode', mode: selectedMode });
+    return;
+  }
+  connect(name, pass);
+}
+
+function connect(name, password) {
+  myName = name;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}`);
+  ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name, password }));
+  ws.onerror = () => { $('menuErr').textContent = 'Ошибка подключения'; };
+  ws.onclose = () => {
+    if (inGame) {
+      inGame = false;
+      closeChat();
+      document.exitPointerLock();
+      $('hud').style.display = 'none';
+      $('menu').style.display = 'flex';
+      $('menuErr').textContent = 'Соединение потеряно.';
+    }
+  };
+  ws.onmessage = e => handleMsg(JSON.parse(e.data));
+}
+function netSend(msg) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); }
+
+function handleMsg(m) {
+  switch (m.t) {
+    case 'authFailed':
+      $('authErr').textContent = m.reason || 'Ошибка';
+      $('menuErr').textContent = m.reason || 'Ошибка';
+      showAuth();
+      break;
+    case 'welcome': {
+      myId = m.id; myUserId = m.userId; myTeam = m.team;
+      isCheater = !!m.cheater;
+      currentMode = m.gameMode || 'classic';
+      selectedMode = currentMode;
+      me.pos.set(m.pos.x, m.pos.y, m.pos.z);
+      me.ry = m.ry; me.rx = 0;
+      me.money = m.money || 800;
+      me.armor = m.armor || 0;
+      matchScore = m.matchScore || { red: 0, blue: 0 };
+      for (const p of m.players) addRemote(p);
+      for (const d of m.destroyed || []) removeBlockLocal(d.x, d.y, d.z, true);
+      for (const b of m.placed) placeBlockLocal(b.x, b.y, b.z, b.team);
+      startGame();
+      updateMoneyHud(); updateHealthHud(); updateMatchScoreHud();
+      updateGrenadeHud();
+      $('modeIndicator').textContent = 'РЕЖИМ: ' + getModeName(currentMode);
+      if (isCheater) {
+        sysChat('🔥 ЧИТ-ПАНЕЛЬ АКТИВНА. Правый CTRL — меню.');
+        updateCheatPanel();
+      }
+      break;
+    }
+    case 'join': addRemote(m.p); break;
+    case 'leave': {
+      const r = remotes.get(m.id);
+      if (r) { scene.remove(r.group); remotes.delete(m.id); }
+      break;
+    }
+    case 'states':
+      for (const s of m.states) {
+        if (s.id === myId) continue;
+        const r = remotes.get(s.id);
+        if (!r) continue;
+        r.target.set(s.pos.x, s.pos.y, s.pos.z);
+        r.try = s.ry; r.trx = s.rx; r.anim = s.anim || 0; r.hp = s.hp; r.armor = s.armor || 0;
+        if (!r.alive) { r.alive = true; r.group.visible = true; }
+      }
+      break;
+    case 'shoot': {
+      const r = remotes.get(m.id);
+      const from = new THREE.Vector3(m.from.x, m.from.y, m.from.z);
+      const dir = new THREE.Vector3(m.dir.x, m.dir.y, m.dir.z);
+      const dist = camera ? from.distanceTo(me.pos) : 50;
+      spawnTracer(from, dir, m.w);
+      SND.shot(m.w, Math.max(0.02, 0.25 * Math.min(1, 14 / (dist + 1))));
+      if (r) r.shootAnim = 0.12;
+      break;
+    }
+    case 'hp':
+      if (cheats.infiniteHp) break;
+      me.hp = m.hp; me.armor = m.armor || 0;
+      updateHealthHud(); SND.hurt();
+      const v = $('dmgVignette');
+      v.style.opacity = 1; setTimeout(() => v.style.opacity = 0, 120);
+      break;
+    case 'armorUpdate': me.armor = m.armor; updateHealthHud(); break;
+    case 'moneyUpdate': me.money = m.money; updateMoneyHud(); break;
+    case 'weaponSwitched': {
+      me.weapon = m.weapon;
+      sysChat('🔫 Новое оружие: ' + (WEAPONS[m.weapon]?.name || m.weapon));
+      updateAmmoHud();
+      break;
+    }
+    case 'hitconfirm': {
+      const hm = $('hitmarker');
+      hm.classList.toggle('head', m.head);
+      hm.style.opacity = 1;
+      clearTimeout(hm._t); hm._t = setTimeout(() => hm.style.opacity = 0, 120);
+      m.head ? SND.headshot() : SND.hit();
+      break;
+    }
+    case 'death': {
+      const victim = m.victim === myId ? null : remotes.get(m.victim);
+      const killer = m.killer === myId ? null : remotes.get(m.killer);
+      const vName = victim ? victim.name : myName;
+      const vTeam = victim ? victim.team : myTeam;
+      const kName = killer ? killer.name : myName;
+      const kTeam = killer ? killer.team : myTeam;
+      feed(kName, kTeam, vName, vTeam, m.head, m.w);
+      if (victim) { victim.alive = false; victim.deaths++; deathBurst(victim.group.position); victim.group.visible = false; }
+      if (killer) killer.kills++;
+      if (m.victim === myId) {
+        if (cheats.infiniteHp) { me.hp = 100; updateHealthHud(); break; }
+        me.hp = 0; me.dead = true; me.deaths++;
+        updateHealthHud(); SND.death(); showDeathScreen(kName);
+      }
+      if (m.killer === myId) { me.kills++; SND.kill(); }
+      break;
+    }
+    case 'respawn': {
+      if (m.id === myId) {
+        me.pos.set(m.pos.x, m.pos.y, m.pos.z);
+        me.vel.set(0, 0, 0);
+        me.hp = 100; me.armor = m.armor || 0; me.dead = false;
+        me.ammo = { rifle: 30, shotgun: 6, sniper: 5, deagle: 7 };
+        me.blocks = 64; me.reloading = false;
+        me.flashing = 0;
+        me.grenades = { he: 1, flash: 1, smoke: 1 };
+        me.ry = myTeam === 'red' ? -Math.PI / 2 : Math.PI / 2; me.rx = 0;
+        updateHealthHud(); updateAmmoHud(); updateHotbar(); updateGrenadeHud();
+        $('deathScreen').style.display = 'none';
+        const f = $('respawnFlash');
+        f.style.opacity = 0.8; f.style.transition = 'none';
+        requestAnimationFrame(() => { f.style.transition = 'opacity .6s'; f.style.opacity = 0; });
+        SND.spawn();
+      } else {
+        const r = remotes.get(m.id);
+        if (r) { r.alive = true; r.hp = 100; r.armor = 0; r.group.position.set(m.pos.x, m.pos.y, m.pos.z); r.target.set(m.pos.x, m.pos.y, m.pos.z); r.group.visible = true; }
+      }
+      break;
+    }
+    case 'place': placeBlockLocal(m.x, m.y, m.z, m.team); break;
+    case 'destroy': removeBlockLocal(m.x, m.y, m.z); break;
+
+    // Гранаты
+    case 'grenadesUpdate':
+      if (me.grenades) {
+        me.grenades.he = m.grenades.he;
+        me.grenades.flash = m.grenades.flash;
+        me.grenades.smoke = m.grenades.smoke;
+        updateGrenadeHud();
+      }
+      break;
+    case 'grenadeThrown': spawnGrenadeMesh(m.type, m.from, m.vel); break;
+    case 'grenadeExplode': explodeGrenadeLocal(m.x, m.y, m.z, m.type); break;
+    case 'flash': me.flashing = m.duration; applyFlash(); break;
+    case 'smokeStart': spawnSmokeLocal(m.x, m.y, m.z, m.duration); break;
+
+    // Режим
+    case 'modeChanged':
+      currentMode = m.mode;
+      selectedMode = m.mode;
+      $('modeIndicator').textContent = 'РЕЖИМ: ' + getModeName(m.mode);
+      sysChat('🎮 Режим: ' + getModeName(m.mode));
+      document.querySelectorAll('#modeSelect button').forEach(b => b.classList.toggle('active', b.dataset.mode === m.mode));
+      break;
+
+    // Раунды
+    case 'roundStart':
+      matchScore = m.matchScore || matchScore;
+      roundTimeLeft = m.roundTime || 115000;
+      buyTimeLeft = m.buyTime || 15000;
+      inBuyPhase = true;
+      updateMatchScoreHud();
+      sysChat('🎬 НОВЫЙ РАУНД!');
+      break;
+    case 'timer':
+      roundTimeLeft = m.roundLeft;
+      inBuyPhase = m.buyPhase;
+      updateTimerHud();
+      if (inBuyPhase) buyTimeLeft -= 1000;
+      break;
+    case 'roundEnd': {
+      roundTimeLeft = 0; inBuyPhase = false;
+      matchScore = m.matchScore || matchScore;
+      updateMatchScoreHud();
+      const win = $('roundWin');
+      win.className = m.winner;
+      $('roundWinText').textContent = m.winner === 'red' ? 'КРАСНЫЕ ПОБЕДИЛИ' : m.winner === 'blue' ? 'СИНИЕ ПОБЕДИЛИ' : 'НИЧЬЯ';
+      const reasons = { bomb: 'Бомба взорвалась', defuse: 'Бомба разминирована', time: 'Время вышло', elimination: 'Уничтожение' };
+      $('roundWinSub').textContent = reasons[m.reason] || '';
+      win.style.display = 'flex';
+      if (m.winner === myTeam) SND.win(); else SND.lose();
+      setTimeout(() => { win.style.display = 'none'; }, 4000);
+      break;
+    }
+    case 'matchEnd': {
+      $('matchEndScreen').classList.add('active');
+      const win = $('matchWinText');
+      win.className = 'matchWin ' + m.winner;
+      win.textContent = m.winner === 'red' ? 'КРАСНЫЕ ПОБЕДИЛИ МАТЧ!' : 'СИНИЕ ПОБЕДИЛИ МАТЧ!';
+      $('matchScoreText').textContent = `${m.matchScore.red} : ${m.matchScore.blue}`;
+      let cd = 8;
+      const cdEl = $('matchCountdown');
+      cdEl.textContent = cd;
+      const iv = setInterval(() => { cd--; if (cd < 0) { clearInterval(iv); return; } cdEl.textContent = cd; }, 1000);
+      break;
+    }
+    case 'newMatch':
+      $('matchEndScreen').classList.remove('active');
+      matchScore = { red: 0, blue: 0 };
+      updateMatchScoreHud();
+      break;
+
+    case 'bought':
+      me.money = m.money;
+      me.armor = m.armor;
+      me.weapons = m.weapons || me.weapons;
+      if (m.grenades) me.grenades = m.grenades;
+      updateMoneyHud(); updateHealthHud(); updateBuyMenu(); updateGrenadeHud();
+      SND.buy();
+      break;
+    case 'buyError': sysChat('⚠️ ' + m.text); SND.error(); break;
+
+    case 'plantStarted': plantDuration = cheats.instantPlant ? 100 : (m.duration || 3000); break;
+    case 'plantCancelled':
+      planting = false;
+      clearInterval(plantProgressInterval); plantProgressInterval = null;
+      $('plantProgress').style.display = 'none';
+      break;
+    case 'bombPlanted':
+      activeBomb = m.bomb;
+      spawnBombMesh();
+      startBombTimer();
+      sysChat('💣 БОМБА ЗАЛОЖЕНА!');
+      break;
+    case 'bombExploded': {
+      if (bombMesh) { scene.remove(bombMesh); bombMesh = null; }
+      activeBomb = null;
+      if (bombTimerInterval) { clearInterval(bombTimerInterval); bombTimerInterval = null; }
+      $('bombTimer').style.display = 'none';
+      sysChat('💥 БОМБА ВЗОРВАЛАСЬ!');
+      const pos = new THREE.Vector3(m.bomb.x, m.bomb.y + 1, m.bomb.z);
+      burst(pos, 0xff7722, 40, 15);
+      burst(pos, 0xffcc44, 30, 12);
+      burst(pos, 0x777777, 25, 8);
+      SND.boom(0.6);
+      break;
+    }
+    case 'bombDefused':
+      if (bombMesh) { scene.remove(bombMesh); bombMesh = null; }
+      activeBomb = null;
+      if (bombTimerInterval) { clearInterval(bombTimerInterval); bombTimerInterval = null; }
+      $('bombTimer').style.display = 'none';
+      sysChat('🔧 БОМБА РАЗМИНИРОВАНА!');
+      break;
+    case 'bombError': sysChat('⚠️ ' + m.text); break;
+    case 'defuseStarted': defuseDuration = cheats.instantDefuse ? 100 : (m.duration || 5000); break;
+    case 'defuseCancelled':
+      defusing = false;
+      clearInterval(defuseProgressInterval); defuseProgressInterval = null;
+      $('plantProgress').style.display = 'none';
+      break;
+    case 'chat': addChatMessage(m.name, m.team, m.text); break;
+
+    // Друзья
+    case 'friendList':
+      friendsList = m.friends || [];
+      friendRequests = m.requests || [];
+      renderFriendsInModal();
+      break;
+    case 'friendRequest':
+      showNotification('info', 'Заявка в друзья', m.name + ' хочет добавить тебя', null);
+      break;
+    case 'friendAdded':
+      showNotification('success', 'Друзья', m.text || 'Готово');
+      break;
+    case 'friendError':
+      showNotification('error', 'Ошибка', m.text || 'Что-то пошло не так');
+      break;
+
+    // Лобби
+    case 'lobbyList':
+      lobbiesList = m.lobbies || [];
+      break;
+    case 'lobbyJoined':
+      myLobby = { code: m.code, name: m.name, mode: m.mode, isHost: m.isHost };
+      showNotification('success', 'Лобби', `Ты в комнате «${m.name}» (${m.code})`);
+      sysChat(`🚪 Ты в лобби: ${m.name} (${m.code})`);
+      // Автоматически подключаемся к игре
+      if (!inGame) {
+        const name = $('menuNickBig').textContent;
+        const pass = localStorage.getItem('blockade_password') || '';
+        $('menu').style.display = 'none';
+        connect(name, pass);
+      }
+      break;
+    case 'lobbyLeft':
+      myLobby = null;
+      showNotification('info', 'Лобби', 'Ты вышел из комнаты');
+      break;
+    case 'lobbyError':
+      showNotification('error', 'Лобби', m.text || 'Ошибка');
+      break;
+    case 'lobbyInvite':
+      showNotification('info', 'Приглашение в лобби',
+        `${m.fromName} приглашает тебя в «${m.mode}» (${m.code})`,
+        { code: m.code, from: m.fromName });
+      break;
+    case 'lobbyPlayers':
+      showNotification('info', 'Лобби', 'Игроки: ' + m.players.join(', '));
+      break;
+    case 'lobbyModeChanged':
+      selectedMode = m.mode;
+      showNotification('info', 'Лобби', 'Режим изменён на ' + getModeName(m.mode));
+      break;
+  }
+}
+
+function getModeName(mode) {
+  const names = { classic: 'CLASSIC', arena: '1V1 ARENA', deathmatch: 'DEATHMATCH', gungame: 'GUN GAME' };
+  return names[mode] || 'CLASSIC';
+}
+
+// ============================================================
+// Notifications
+// ============================================================
+function showNotification(type, title, text, invite = null) {
+  const box = $('notifications');
+  const div = document.createElement('div');
+  div.className = 'notif ' + (type || 'info');
+  let html = `<div class="notifTitle">${title}</div><div class="notifText">${text}</div>`;
+  if (invite) {
+    html += `<div class="notifActions">
+      <button class="accept" onclick="acceptLobbyInvite('${invite.code}'); this.closest('.notif').remove();">Принять</button>
+      <button class="decline" onclick="this.closest('.notif').remove();">Отклонить</button>
+    </div>`;
+  }
+  div.innerHTML = html;
+  box.appendChild(div);
+  SND.notif();
+  // Автоудаление через 8 сек (если нет кнопок)
+  if (!invite) setTimeout(() => { div.style.opacity = '0'; setTimeout(() => div.remove(), 400); }, 6000);
+  // Ограничение
+  while (box.children.length > 5) box.firstChild.remove();
+}
+
+function acceptLobbyInvite(code) {
+  netSend({ t: 'joinLobby', code });
+}
+
+// ============================================================
+// Friends / Lobby actions
+// ============================================================
+function addFriendByName(name) {
+  if (!name) return;
+  netSend({ t: 'addFriend', name });
+}
+function acceptFriend(id) {
+  netSend({ t: 'acceptFriend', from: id });
+}
+function declineFriend(id) {
+  netSend({ t: 'declineFriend', from: id });
+}
+function inviteFriend(id) {
+  netSend({ t: 'inviteFriend', id });
+}
+function createLobby() {
+  const name = myName + "'s lobby";
+  netSend({ t: 'createLobby', name, mode: selectedMode });
+}
+function joinLobbyByCode(code) {
+  if (!code) return;
+  netSend({ t: 'joinLobby', code: code.toUpperCase() });
+}
+function leaveLobby() {
+  netSend({ t: 'leaveLobby' });
+  myLobby = null;
 }
 
 // ============================================================
@@ -370,280 +825,6 @@ function applyFullBright() {
       if (o.isDirectionalLight) o.intensity = cheats.fullBright ? 1.0 : 1.6;
     }
   });
-}
-
-// ============================================================
-// Networking
-// ============================================================
-function connect(name, password) {
-  myName = name;
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${proto}://${location.host}`);
-  ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name, password }));
-  ws.onerror = () => { $('menuErr').textContent = 'Ошибка подключения'; $('playBtn').disabled = false; };
-  ws.onclose = () => {
-    if (inGame) {
-      inGame = false;
-      closeChat();
-      document.exitPointerLock();
-      $('hud').style.display = 'none';
-      $('menu').style.display = 'flex';
-      $('menuErr').textContent = 'Соединение потеряно.';
-      $('playBtn').disabled = false;
-    }
-  };
-  ws.onmessage = e => handleMsg(JSON.parse(e.data));
-}
-function netSend(msg) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); }
-
-function handleMsg(m) {
-  switch (m.t) {
-    case 'authFailed':
-      $('authErr').textContent = m.reason || 'Ошибка';
-      $('menuErr').textContent = m.reason || 'Ошибка';
-      $('playBtn').disabled = false;
-      showAuth();
-      break;
-    case 'welcome': {
-      myId = m.id; myTeam = m.team;
-      isCheater = !!m.cheater;
-      currentMode = m.gameMode || 'classic';
-      me.pos.set(m.pos.x, m.pos.y, m.pos.z);
-      me.ry = m.ry; me.rx = 0;
-      me.money = m.money || 800;
-      me.armor = m.armor || 0;
-      matchScore = m.matchScore || { red: 0, blue: 0 };
-      for (const p of m.players) addRemote(p);
-      for (const d of m.destroyed || []) removeBlockLocal(d.x, d.y, d.z, true);
-      for (const b of m.placed) placeBlockLocal(b.x, b.y, b.z, b.team);
-      startGame();
-      updateMoneyHud(); updateHealthHud(); updateMatchScoreHud();
-      updateGrenadeHud();
-      $('modeIndicator').textContent = 'РЕЖИМ: ' + (currentMode === 'arena' ? '1v1 ARENA' : 'CLASSIC');
-      if (isCheater) {
-        sysChat('🔥 ЧИТ-ПАНЕЛЬ АКТИВНА. Правый CTRL — меню.');
-        updateCheatPanel();
-      }
-      break;
-    }
-    case 'join': addRemote(m.p); break;
-    case 'leave': {
-      const r = remotes.get(m.id);
-      if (r) { scene.remove(r.group); remotes.delete(m.id); }
-      break;
-    }
-    case 'states':
-      for (const s of m.states) {
-        if (s.id === myId) continue;
-        const r = remotes.get(s.id);
-        if (!r) continue;
-        r.target.set(s.pos.x, s.pos.y, s.pos.z);
-        r.try = s.ry; r.trx = s.rx; r.anim = s.anim || 0; r.hp = s.hp; r.armor = s.armor || 0;
-        if (!r.alive) { r.alive = true; r.group.visible = true; }
-      }
-      break;
-    case 'shoot': {
-      const r = remotes.get(m.id);
-      const from = new THREE.Vector3(m.from.x, m.from.y, m.from.z);
-      const dir = new THREE.Vector3(m.dir.x, m.dir.y, m.dir.z);
-      const dist = camera ? from.distanceTo(me.pos) : 50;
-      spawnTracer(from, dir, m.w);
-      SND.shot(m.w, Math.max(0.02, 0.25 * Math.min(1, 14 / (dist + 1))));
-      if (r) r.shootAnim = 0.12;
-      break;
-    }
-    case 'hp': {
-      if (cheats.infiniteHp) break;
-      me.hp = m.hp; me.armor = m.armor || 0;
-      updateHealthHud(); SND.hurt();
-      const v = $('dmgVignette');
-      v.style.opacity = 1; setTimeout(() => v.style.opacity = 0, 120);
-      break;
-    }
-    case 'armorUpdate': me.armor = m.armor; updateHealthHud(); break;
-    case 'moneyUpdate': me.money = m.money; updateMoneyHud(); break;
-    case 'hitconfirm': {
-      const hm = $('hitmarker');
-      hm.classList.toggle('head', m.head);
-      hm.style.opacity = 1;
-      clearTimeout(hm._t); hm._t = setTimeout(() => hm.style.opacity = 0, 120);
-      m.head ? SND.headshot() : SND.hit();
-      break;
-    }
-    case 'death': {
-      const victim = m.victim === myId ? null : remotes.get(m.victim);
-      const killer = m.killer === myId ? null : remotes.get(m.killer);
-      const vName = victim ? victim.name : myName;
-      const vTeam = victim ? victim.team : myTeam;
-      const kName = killer ? killer.name : myName;
-      const kTeam = killer ? killer.team : myTeam;
-      feed(kName, kTeam, vName, vTeam, m.head, m.w);
-      if (victim) { victim.alive = false; victim.deaths++; deathBurst(victim.group.position); victim.group.visible = false; }
-      if (killer) killer.kills++;
-      if (m.victim === myId) {
-        if (cheats.infiniteHp) { me.hp = 100; updateHealthHud(); break; }
-        me.hp = 0; me.dead = true; me.deaths++;
-        updateHealthHud(); SND.death(); showDeathScreen(kName);
-      }
-      if (m.killer === myId) { me.kills++; SND.kill(); }
-      break;
-    }
-    case 'respawn': {
-      if (m.id === myId) {
-        me.pos.set(m.pos.x, m.pos.y, m.pos.z);
-        me.vel.set(0, 0, 0);
-        me.hp = 100; me.armor = m.armor || 0; me.dead = false;
-        me.ammo = { rifle: 30, shotgun: 6, sniper: 5, deagle: 7 };
-        me.blocks = 64; me.reloading = false;
-        me.flashing = 0;
-        me.grenades = { he: 1, flash: 1, smoke: 1 };
-        me.ry = myTeam === 'red' ? -Math.PI / 2 : Math.PI / 2; me.rx = 0;
-        updateHealthHud(); updateAmmoHud(); updateHotbar(); updateGrenadeHud();
-        $('deathScreen').style.display = 'none';
-        const f = $('respawnFlash');
-        f.style.opacity = 0.8; f.style.transition = 'none';
-        requestAnimationFrame(() => { f.style.transition = 'opacity .6s'; f.style.opacity = 0; });
-        SND.spawn();
-      } else {
-        const r = remotes.get(m.id);
-        if (r) { r.alive = true; r.hp = 100; r.armor = 0; r.group.position.set(m.pos.x, m.pos.y, m.pos.z); r.target.set(m.pos.x, m.pos.y, m.pos.z); r.group.visible = true; }
-      }
-      break;
-    }
-    case 'place': placeBlockLocal(m.x, m.y, m.z, m.team); break;
-    case 'destroy': removeBlockLocal(m.x, m.y, m.z); break;
-
-    // ============ ГРАНАТЫ ============
-    case 'grenadesUpdate':
-      if (me.grenades) {
-        me.grenades.he = m.grenades.he;
-        me.grenades.flash = m.grenades.flash;
-        me.grenades.smoke = m.grenades.smoke;
-        updateGrenadeHud();
-      }
-      break;
-    case 'grenadeThrown':
-      spawnGrenadeMesh(m.type, m.from, m.vel);
-      break;
-    case 'grenadeExplode':
-      explodeGrenadeLocal(m.x, m.y, m.z, m.type);
-      break;
-    case 'flash':
-      me.flashing = m.duration;
-      applyFlash();
-      break;
-    case 'smokeStart':
-      spawnSmokeLocal(m.x, m.y, m.z, m.duration);
-      break;
-    case 'smokeEnd':
-      break;
-
-    // ============ РЕЖИМ ============
-    case 'modeChanged':
-      currentMode = m.mode;
-      $('modeIndicator').textContent = 'РЕЖИМ: ' + (m.mode === 'arena' ? '1v1 ARENA' : 'CLASSIC');
-      sysChat('🎮 Режим: ' + (m.mode === 'arena' ? '1v1 ARENA' : 'CLASSIC'));
-      document.querySelectorAll('#modeSelect button').forEach(b => b.classList.toggle('active', b.dataset.mode === m.mode));
-      break;
-
-    // ============ РАУНДЫ ============
-    case 'roundStart':
-      matchScore = m.matchScore || matchScore;
-      roundTimeLeft = m.roundTime || 115000;
-      buyTimeLeft = m.buyTime || 15000;
-      inBuyPhase = true;
-      updateMatchScoreHud();
-      sysChat('🎬 НОВЫЙ РАУНД!');
-      break;
-    case 'timer':
-      roundTimeLeft = m.roundLeft;
-      inBuyPhase = m.buyPhase;
-      updateTimerHud();
-      if (inBuyPhase) buyTimeLeft -= 1000;
-      break;
-    case 'roundEnd': {
-      roundTimeLeft = 0; inBuyPhase = false;
-      matchScore = m.matchScore || matchScore;
-      updateMatchScoreHud();
-      const win = $('roundWin');
-      win.className = m.winner;
-      $('roundWinText').textContent = m.winner === 'red' ? 'КРАСНЫЕ ПОБЕДИЛИ' : m.winner === 'blue' ? 'СИНИЕ ПОБЕДИЛИ' : 'НИЧЬЯ';
-      const reasons = { bomb: 'Бомба взорвалась', defuse: 'Бомба разминирована', time: 'Время вышло', elimination: 'Уничтожение' };
-      $('roundWinSub').textContent = reasons[m.reason] || '';
-      win.style.display = 'flex';
-      if (m.winner === myTeam) SND.win(); else SND.lose();
-      setTimeout(() => { win.style.display = 'none'; }, 4000);
-      break;
-    }
-    case 'matchEnd': {
-      $('matchEndScreen').classList.add('active');
-      const win = $('matchWinText');
-      win.className = 'matchWin ' + m.winner;
-      win.textContent = m.winner === 'red' ? 'КРАСНЫЕ ПОБЕДИЛИ МАТЧ!' : 'СИНИЕ ПОБЕДИЛИ МАТЧ!';
-      $('matchScoreText').textContent = `${m.matchScore.red} : ${m.matchScore.blue}`;
-      let cd = 8;
-      const cdEl = $('matchCountdown');
-      cdEl.textContent = cd;
-      const iv = setInterval(() => { cd--; if (cd < 0) { clearInterval(iv); return; } cdEl.textContent = cd; }, 1000);
-      break;
-    }
-    case 'newMatch':
-      $('matchEndScreen').classList.remove('active');
-      matchScore = { red: 0, blue: 0 };
-      updateMatchScoreHud();
-      break;
-
-    case 'bought':
-      me.money = m.money;
-      me.armor = m.armor;
-      me.weapons = m.weapons || me.weapons;
-      if (m.grenades) me.grenades = m.grenades;
-      updateMoneyHud(); updateHealthHud(); updateBuyMenu(); updateGrenadeHud();
-      SND.buy();
-      break;
-    case 'buyError': sysChat('⚠️ ' + m.text); SND.error(); break;
-
-    case 'plantStarted': plantDuration = cheats.instantPlant ? 100 : (m.duration || 3000); break;
-    case 'plantCancelled':
-      planting = false;
-      clearInterval(plantProgressInterval); plantProgressInterval = null;
-      $('plantProgress').style.display = 'none';
-      break;
-    case 'bombPlanted':
-      activeBomb = m.bomb;
-      spawnBombMesh();
-      startBombTimer();
-      sysChat('💣 БОМБА ЗАЛОЖЕНА!');
-      break;
-    case 'bombExploded': {
-      if (bombMesh) { scene.remove(bombMesh); bombMesh = null; }
-      activeBomb = null;
-      if (bombTimerInterval) { clearInterval(bombTimerInterval); bombTimerInterval = null; }
-      $('bombTimer').style.display = 'none';
-      sysChat('💥 БОМБА ВЗОРВАЛАСЬ!');
-      const pos = new THREE.Vector3(m.bomb.x, m.bomb.y + 1, m.bomb.z);
-      burst(pos, 0xff7722, 40, 15);
-      burst(pos, 0xffcc44, 30, 12);
-      burst(pos, 0x777777, 25, 8);
-      SND.boom(0.6);
-      break;
-    }
-    case 'bombDefused':
-      if (bombMesh) { scene.remove(bombMesh); bombMesh = null; }
-      activeBomb = null;
-      if (bombTimerInterval) { clearInterval(bombTimerInterval); bombTimerInterval = null; }
-      $('bombTimer').style.display = 'none';
-      sysChat('🔧 БОМБА РАЗМИНИРОВАНА!');
-      break;
-    case 'bombError': sysChat('⚠️ ' + m.text); break;
-    case 'defuseStarted': defuseDuration = cheats.instantDefuse ? 100 : (m.duration || 5000); break;
-    case 'defuseCancelled':
-      defusing = false;
-      clearInterval(defuseProgressInterval); defuseProgressInterval = null;
-      $('plantProgress').style.display = 'none';
-      break;
-    case 'chat': addChatMessage(m.name, m.team, m.text); break;
-  }
 }
 
 // ============================================================
@@ -862,7 +1043,7 @@ function updateRemotes(dt) {
 }
 
 // ============================================================
-// ЧИТЫ
+// Читы
 // ============================================================
 function runAimbot() {
   if (!cheats.aimbot || !isCheater) return;
@@ -1128,7 +1309,7 @@ function tryBreakBlock() {
 }
 
 // ============================================================
-// GRENADES
+// Гранаты
 // ============================================================
 function startThrowGrenade(type) {
   if (me.dead) return;
@@ -1349,7 +1530,7 @@ function buildViewModels() {
     vm.models.pickaxe = g;
   }
   for (const m of Object.values(vm.models)) { vm.group.add(m); m.visible = false; }
-  vm.models[SLOTS[me.slot]].visible = true;
+  vm.models[SLOTS[me.slot]]?.visible = true;
 }
 function updateViewModel(dt, moving) {
   if (!vm.group) return;
@@ -1384,9 +1565,7 @@ function selectSlot(i) {
 // ============================================================
 // HUD helpers
 // ============================================================
-function updateHotbar() {
-  // В новом HUD hotbar отсутствует — оставлено для совместимости
-}
+function updateHotbar() {}
 function updateAmmoHud() {
   const wkey = me.weapon || 'rifle';
   const w = WEAPONS[wkey] || WEAPONS.rifle;
@@ -1407,7 +1586,7 @@ function feed(killer, kTeam, victim, vTeam, head, weapon) {
 function showDeathScreen(killerName) {
   $('deathScreen').style.display = 'flex';
   $('deathBy').textContent = 'Тебя убил: ' + killerName;
-  $('deathCd').textContent = 'Ждём конца раунда...';
+  $('deathCd').textContent = 'Ждём...';
 }
 function updateScoreboard() {
   const sb = $('scoreboard');
@@ -1678,11 +1857,9 @@ function setupInput() {
       if (activeBomb) startDefuse();
       else if (!planting) startPlant();
     }
-    // ГРАНАТЫ (для всех)
     if (e.code === 'KeyG' && !e.repeat) { e.preventDefault(); startThrowGrenade('he'); }
     if (e.code === 'KeyF' && !e.repeat) { e.preventDefault(); startThrowGrenade('flash'); }
     if (e.code === 'KeyC' && !e.repeat) { e.preventDefault(); startThrowGrenade('smoke'); }
-    // ЧИТЫ
     if (isCheater) {
       if (e.code === 'KeyX') { e.preventDefault(); toggleCheat('aimbot'); }
       if (e.code === 'KeyZ') { e.preventDefault(); toggleCheat('wallhack'); }
@@ -1703,7 +1880,6 @@ function setupInput() {
     if (chatOpen) return;
     keys[e.code] = false;
     if (e.code === 'Tab') { tabHeld = false; updateScoreboard(); }
-    // Бросок гранаты при отпускании
     if ((e.code === 'KeyG' || e.code === 'KeyF' || e.code === 'KeyC') && throwing) {
       releaseThrowGrenade();
     }
@@ -1743,13 +1919,34 @@ function setupInput() {
   document.querySelectorAll('#cheatMenu .cheatItem').forEach(el => {
     el.addEventListener('click', () => toggleCheat(el.dataset.cheat));
   });
-  document.getElementById('cheatMenuClose')?.addEventListener('click', closeCheatMenu);
-  document.getElementById('cheatMenuBtn')?.addEventListener('click', openCheatMenu);
+  $('cheatMenuClose')?.addEventListener('click', closeCheatMenu);
+  $('cheatMenuBtn')?.addEventListener('click', openCheatMenu);
   document.querySelectorAll('#modeSelect button').forEach(b => {
     b.addEventListener('click', () => {
       if (!isCheater) return;
       netSend({ t: 'setMode', mode: b.dataset.mode });
     });
+  });
+  document.querySelectorAll('#playModal .modeCard').forEach(el => {
+    el.addEventListener('click', () => {
+      selectedMode = el.dataset.mode;
+      updateModalUI();
+    });
+  });
+  $('modalCancel')?.addEventListener('click', closePlayModal);
+  $('modalPlay')?.addEventListener('click', () => { connectAndPlay(); });
+  $('createLobbyBtn')?.addEventListener('click', createLobby);
+  $('quickPlayBtn2')?.addEventListener('click', () => { closePlayModal(); connectAndPlay(); });
+  $('joinLobbyBtn')?.addEventListener('click', () => {
+    const code = $('lobbyCodeInput').value.trim();
+    if (code) joinLobbyByCode(code);
+  });
+  $('addFriendBtn')?.addEventListener('click', () => {
+    const name = $('friendNameInput').value.trim();
+    if (name) { addFriendByName(name); $('friendNameInput').value = ''; }
+  });
+  $('lobbyCodeInput')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { joinLobbyByCode(e.target.value); }
   });
 }
 function setTalking(on) {
@@ -1790,6 +1987,7 @@ function startGame() {
   $('menu').style.display = 'none';
   $('authScreen').style.display = 'none';
   $('settings').style.display = 'none';
+  $('playModal').classList.remove('active');
   $('hud').style.display = 'block';
   $('teamBanner').style.display = 'flex';
   const t = $('teamBannerText');
