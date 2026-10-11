@@ -14,6 +14,7 @@ const WEAPONS = {
   sniper:  { name: 'AWP',      dmg: 70, rate: 1400, mag: 5,  reload: 2400, spread: 0.002, auto: false, pellets: 1, range: 140 },
   deagle:  { name: 'DEAGLE',   dmg: 45, rate: 400,  mag: 7,  reload: 2000, spread: 0.01,  auto: false, pellets: 1, range: 100 },
   blocks:  { name: 'БЛОКИ',    builder: true },
+  pickaxe: { name: 'КИРКА',    tool: true, auto: true },
 };
 const SLOTS = ['rifle', 'shotgun', 'sniper', 'blocks', 'pickaxe'];
 const TEAM_RU = { red: 'КРАСНЫХ', blue: 'СИНИХ' };
@@ -30,7 +31,7 @@ function loadSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem('blockade_settings') || '{}');
     Object.assign(SETTINGS, saved);
-  } catch {}
+  } catch (e) {}
   applySettings();
 }
 function saveSettings() {
@@ -38,16 +39,20 @@ function saveSettings() {
   applySettings();
 }
 function applySettings() {
-  document.getElementById('toggleMobile')?.classList.toggle('active', SETTINGS.mobile);
-  document.getElementById('toggleRadar')?.classList.toggle('active', SETTINGS.radar);
-  document.getElementById('toggleFps')?.classList.toggle('active', SETTINGS.showFps);
+  const toggleMobile = document.getElementById('toggleMobile');
+  if (toggleMobile) toggleMobile.classList.toggle('active', SETTINGS.mobile);
+  const toggleRadar = document.getElementById('toggleRadar');
+  if (toggleRadar) toggleRadar.classList.toggle('active', SETTINGS.radar);
+  const toggleFps = document.getElementById('toggleFps');
+  if (toggleFps) toggleFps.classList.toggle('active', SETTINGS.showFps);
   const s = document.getElementById('sensRange');
   if (s) { s.value = SETTINGS.sensitivity; const sv = document.getElementById('sensVal'); if (sv) sv.textContent = SETTINGS.sensitivity.toFixed(1); }
   const v = document.getElementById('volRange');
   if (v) { v.value = Math.round(SETTINGS.volume * 100); const vv = document.getElementById('volVal'); if (vv) vv.textContent = Math.round(SETTINGS.volume * 100) + '%'; }
   const q = document.getElementById('qualitySelect');
   if (q) q.value = SETTINGS.quality;
-  document.getElementById('mobileControls')?.classList.toggle('active', SETTINGS.mobile);
+  const mc = document.getElementById('mobileControls');
+  if (mc) mc.classList.toggle('active', SETTINGS.mobile);
   const r = document.getElementById('radar');
   if (r) r.style.display = SETTINGS.radar ? 'block' : 'none';
   const f = document.getElementById('fpsCounter');
@@ -71,7 +76,6 @@ let inBuyPhase = false;
 let currentMode = 'classic';
 let selectedMode = 'classic';
 
-// Друзья и лобби
 let friendsList = [];
 let friendRequests = [];
 let lobbiesList = [];
@@ -105,9 +109,9 @@ let tabHeld = false;
 let chatOpen = false;
 let buyMenuOpen = false;
 
-const tracers = [], particles = [];
+const tracers = [];
+const particles = [];
 
-// Гранаты
 const grenades = [];
 let throwing = false;
 let throwingType = null;
@@ -124,7 +128,6 @@ let defuseStartTime = 0;
 let defuseDuration = 5000;
 let defuseProgressInterval = null;
 
-// Читы
 let isCheater = false;
 const cheats = {
   aimbot: false, wallhack: false, speedhack: false, noclip: false,
@@ -160,7 +163,7 @@ function noiseBurst(dur, freq, vol, type = 'lowpass') {
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
     src.connect(f); f.connect(g); g.connect(ctx.destination);
     src.start();
-  } catch {}
+  } catch (e) {}
 }
 function tone(freq, dur, vol, type = 'square', slide = 0) {
   try {
@@ -171,7 +174,7 @@ function tone(freq, dur, vol, type = 'square', slide = 0) {
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
     o.connect(g); g.connect(ctx.destination);
     o.start(); o.stop(ctx.currentTime + dur);
-  } catch {}
+  } catch (e) {}
 }
 const SND = {
   shot: (w, vol = 0.22) => {
@@ -199,12 +202,16 @@ const SND = {
 };
 
 // ============================================================
-// Menu / Auth
+// $ helper
 // ============================================================
 const $ = id => document.getElementById(id);
 
+// ============================================================
+// Auth
+// ============================================================
 function setupAuth() {
   const nameInput = $('regName'), passInput = $('regPassword'), btn = $('regBtn'), err = $('authErr');
+  if (!nameInput) return;
   nameInput.value = localStorage.getItem('blockade_name') || '';
   passInput.value = localStorage.getItem('blockade_password') || '';
   nameInput.focus();
@@ -232,10 +239,6 @@ function showMenu(name) {
   $('menuNickBig').textContent = name.toUpperCase();
   $('userAvatar').textContent = name.charAt(0).toUpperCase();
   $('playBtn').disabled = false;
-  if (ws && ws.readyState === 1) {
-    // Уже подключён — обновляем друзей/лобби
-    netSend({ t: 'refreshLists' });
-  }
 }
 function showAuth() {
   $('authScreen').style.display = 'flex';
@@ -244,12 +247,9 @@ function showAuth() {
   $('playModal').classList.remove('active');
 }
 function setupMenu() {
-  $('playBtn').addEventListener('click', () => openPlayModal());
-  $('quickPlayBtn').addEventListener('click', () => {
-    selectedMode = 'classic';
-    connectAndPlay();
-  });
-  $('logoutBtn').addEventListener('click', () => showAuth());
+  $('playBtn').addEventListener('click', openPlayModal);
+  $('quickPlayBtn').addEventListener('click', () => { selectedMode = 'classic'; connectAndPlay(); });
+  $('logoutBtn').addEventListener('click', showAuth);
   $('settingsBtn').addEventListener('click', () => {
     $('menu').style.display = 'none';
     $('settings').style.display = 'flex';
@@ -294,31 +294,12 @@ function renderFriendsInModal() {
   if (friendRequests.length) {
     html += '<div style="font-size:10px;color:#f0ad4e;letter-spacing:2px;margin-bottom:8px;">ЗАЯВКИ В ДРУЗЬЯ</div>';
     for (const r of friendRequests) {
-      html += `
-        <div class="friendRow">
-          <div class="friendInfo">
-            <div class="friendStatus online"></div>
-            <div class="friendName">${r.name}</div>
-          </div>
-          <div class="notifActions">
-            <button class="accept" onclick="acceptFriend('${r.id}')">✓</button>
-            <button class="decline" onclick="declineFriend('${r.id}')">×</button>
-          </div>
-        </div>`;
+      html += '<div class="friendRow"><div class="friendInfo"><div class="friendStatus online"></div><div class="friendName">' + r.name + '</div></div><div class="notifActions"><button class="accept" onclick="acceptFriend(\'' + r.id + '\')">✓</button><button class="decline" onclick="declineFriend(\'' + r.id + '\')">×</button></div></div>';
     }
     html += '<div style="height:1px;background:rgba(255,255,255,.08);margin:12px 0;"></div>';
   }
-  if (friendsList.length) {
-    for (const f of friendsList) {
-      html += `
-        <div class="friendRow">
-          <div class="friendInfo">
-            <div class="friendStatus ${f.online ? 'online' : 'offline'}"></div>
-            <div class="friendName">${f.name}${f.inLobby ? ' 🚪' : ''}</div>
-          </div>
-          <button class="friendInvite" onclick="inviteFriend('${f.id}')" ${!f.online ? 'disabled' : ''}>Пригласить</button>
-        </div>`;
-    }
+  for (const f of friendsList) {
+    html += '<div class="friendRow"><div class="friendInfo"><div class="friendStatus ' + (f.online ? 'online' : 'offline') + '"></div><div class="friendName">' + f.name + (f.inLobby ? ' 🚪' : '') + '</div></div><button class="friendInvite" onclick="inviteFriend(\'' + f.id + '\')" ' + (!f.online ? 'disabled' : '') + '>Пригласить</button></div>';
   }
   list.innerHTML = html;
 }
@@ -334,7 +315,6 @@ function connectAndPlay() {
   $('menuErr').textContent = '';
   closePlayModal();
   if (ws && ws.readyState === 1) {
-    // Уже подключён — просто шлём setMode
     netSend({ t: 'setMode', mode: selectedMode });
     return;
   }
@@ -344,7 +324,7 @@ function connectAndPlay() {
 function connect(name, password) {
   myName = name;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${proto}://${location.host}`);
+  ws = new WebSocket(proto + '://' + location.host);
   ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name, password }));
   ws.onerror = () => { $('menuErr').textContent = 'Ошибка подключения'; };
   ws.onclose = () => {
@@ -426,12 +406,11 @@ function handleMsg(m) {
       break;
     case 'armorUpdate': me.armor = m.armor; updateHealthHud(); break;
     case 'moneyUpdate': me.money = m.money; updateMoneyHud(); break;
-    case 'weaponSwitched': {
+    case 'weaponSwitched':
       me.weapon = m.weapon;
-      sysChat('🔫 Новое оружие: ' + (WEAPONS[m.weapon]?.name || m.weapon));
+      sysChat('🔫 Новое оружие: ' + (WEAPONS[m.weapon] ? WEAPONS[m.weapon].name : m.weapon));
       updateAmmoHud();
       break;
-    }
     case 'hitconfirm': {
       const hm = $('hitmarker');
       hm.classList.toggle('head', m.head);
@@ -483,7 +462,6 @@ function handleMsg(m) {
     case 'place': placeBlockLocal(m.x, m.y, m.z, m.team); break;
     case 'destroy': removeBlockLocal(m.x, m.y, m.z); break;
 
-    // Гранаты
     case 'grenadesUpdate':
       if (me.grenades) {
         me.grenades.he = m.grenades.he;
@@ -497,7 +475,6 @@ function handleMsg(m) {
     case 'flash': me.flashing = m.duration; applyFlash(); break;
     case 'smokeStart': spawnSmokeLocal(m.x, m.y, m.z, m.duration); break;
 
-    // Режим
     case 'modeChanged':
       currentMode = m.mode;
       selectedMode = m.mode;
@@ -506,7 +483,6 @@ function handleMsg(m) {
       document.querySelectorAll('#modeSelect button').forEach(b => b.classList.toggle('active', b.dataset.mode === m.mode));
       break;
 
-    // Раунды
     case 'roundStart':
       matchScore = m.matchScore || matchScore;
       roundTimeLeft = m.roundTime || 115000;
@@ -540,7 +516,7 @@ function handleMsg(m) {
       const win = $('matchWinText');
       win.className = 'matchWin ' + m.winner;
       win.textContent = m.winner === 'red' ? 'КРАСНЫЕ ПОБЕДИЛИ МАТЧ!' : 'СИНИЕ ПОБЕДИЛИ МАТЧ!';
-      $('matchScoreText').textContent = `${m.matchScore.red} : ${m.matchScore.blue}`;
+      $('matchScoreText').textContent = m.matchScore.red + ' : ' + m.matchScore.blue;
       let cd = 8;
       const cdEl = $('matchCountdown');
       cdEl.textContent = cd;
@@ -604,7 +580,6 @@ function handleMsg(m) {
       break;
     case 'chat': addChatMessage(m.name, m.team, m.text); break;
 
-    // Друзья
     case 'friendList':
       friendsList = m.friends || [];
       friendRequests = m.requests || [];
@@ -620,20 +595,18 @@ function handleMsg(m) {
       showNotification('error', 'Ошибка', m.text || 'Что-то пошло не так');
       break;
 
-    // Лобби
     case 'lobbyList':
       lobbiesList = m.lobbies || [];
       break;
     case 'lobbyJoined':
       myLobby = { code: m.code, name: m.name, mode: m.mode, isHost: m.isHost };
-      showNotification('success', 'Лобби', `Ты в комнате «${m.name}» (${m.code})`);
-      sysChat(`🚪 Ты в лобби: ${m.name} (${m.code})`);
-      // Автоматически подключаемся к игре
+      showNotification('success', 'Лобби', 'Ты в комнате «' + m.name + '» (' + m.code + ')');
+      sysChat('🚪 Ты в лобби: ' + m.name + ' (' + m.code + ')');
       if (!inGame) {
-        const name = $('menuNickBig').textContent;
-        const pass = localStorage.getItem('blockade_password') || '';
+        const name2 = $('menuNickBig').textContent;
+        const pass2 = localStorage.getItem('blockade_password') || '';
         $('menu').style.display = 'none';
-        connect(name, pass);
+        connect(name2, pass2);
       }
       break;
     case 'lobbyLeft':
@@ -645,7 +618,7 @@ function handleMsg(m) {
       break;
     case 'lobbyInvite':
       showNotification('info', 'Приглашение в лобби',
-        `${m.fromName} приглашает тебя в «${m.mode}» (${m.code})`,
+        m.fromName + ' приглашает тебя в «' + m.mode + '» (' + m.code + ')',
         { code: m.code, from: m.fromName });
       break;
     case 'lobbyPlayers':
@@ -666,58 +639,33 @@ function getModeName(mode) {
 // ============================================================
 // Notifications
 // ============================================================
-function showNotification(type, title, text, invite = null) {
+function showNotification(type, title, text, invite) {
   const box = $('notifications');
+  if (!box) return;
   const div = document.createElement('div');
   div.className = 'notif ' + (type || 'info');
-  let html = `<div class="notifTitle">${title}</div><div class="notifText">${text}</div>`;
+  let html = '<div class="notifTitle">' + title + '</div><div class="notifText">' + text + '</div>';
   if (invite) {
-    html += `<div class="notifActions">
-      <button class="accept" onclick="acceptLobbyInvite('${invite.code}'); this.closest('.notif').remove();">Принять</button>
-      <button class="decline" onclick="this.closest('.notif').remove();">Отклонить</button>
-    </div>`;
+    html += '<div class="notifActions"><button class="accept" onclick="acceptLobbyInvite(\'' + invite.code + '\'); this.closest(\'.notif\').remove();">Принять</button><button class="decline" onclick="this.closest(\'.notif\').remove();">Отклонить</button></div>';
   }
   div.innerHTML = html;
   box.appendChild(div);
   SND.notif();
-  // Автоудаление через 8 сек (если нет кнопок)
   if (!invite) setTimeout(() => { div.style.opacity = '0'; setTimeout(() => div.remove(), 400); }, 6000);
-  // Ограничение
   while (box.children.length > 5) box.firstChild.remove();
 }
-
-function acceptLobbyInvite(code) {
-  netSend({ t: 'joinLobby', code });
-}
+function acceptLobbyInvite(code) { netSend({ t: 'joinLobby', code }); }
 
 // ============================================================
-// Friends / Lobby actions
+// Friends / Lobby
 // ============================================================
-function addFriendByName(name) {
-  if (!name) return;
-  netSend({ t: 'addFriend', name });
-}
-function acceptFriend(id) {
-  netSend({ t: 'acceptFriend', from: id });
-}
-function declineFriend(id) {
-  netSend({ t: 'declineFriend', from: id });
-}
-function inviteFriend(id) {
-  netSend({ t: 'inviteFriend', id });
-}
-function createLobby() {
-  const name = myName + "'s lobby";
-  netSend({ t: 'createLobby', name, mode: selectedMode });
-}
-function joinLobbyByCode(code) {
-  if (!code) return;
-  netSend({ t: 'joinLobby', code: code.toUpperCase() });
-}
-function leaveLobby() {
-  netSend({ t: 'leaveLobby' });
-  myLobby = null;
-}
+function addFriendByName(name) { if (name) netSend({ t: 'addFriend', name }); }
+function acceptFriend(id) { netSend({ t: 'acceptFriend', from: id }); }
+function declineFriend(id) { netSend({ t: 'declineFriend', from: id }); }
+function inviteFriend(id) { netSend({ t: 'inviteFriend', id }); }
+function createLobby() { netSend({ t: 'createLobby', name: myName + "'s lobby", mode: selectedMode }); }
+function joinLobbyByCode(code) { if (code) netSend({ t: 'joinLobby', code: code.toUpperCase() }); }
+function leaveLobby() { netSend({ t: 'leaveLobby' }); myLobby = null; }
 
 // ============================================================
 // Buy Menu
@@ -796,7 +744,7 @@ function toggleCheat(name) {
   updateCheatMenu();
   updateCheatPanel();
   if (name === 'fullBright') applyFullBright();
-  sysChat(`[ЧИТ] ${name}: ${cheats[name] ? 'ВКЛ' : 'ВЫКЛ'}`);
+  sysChat('[ЧИТ] ' + name + ': ' + (cheats[name] ? 'ВКЛ' : 'ВЫКЛ'));
 }
 function updateCheatPanel() {
   if (!isCheater) return;
@@ -810,10 +758,12 @@ function updateCheatPanel() {
     instantDefuse: 'FastDefuse', chams: 'Chams',
   };
   list.innerHTML = '';
-  for (const [k, v] of Object.entries(cheats)) {
+  for (const k in cheats) {
+    if (!cheats.hasOwnProperty(k)) continue;
+    const v = cheats[k];
     const div = document.createElement('div');
     div.className = 'cheatRow' + (v ? ' active' : '');
-    div.innerHTML = `<span>${names[k]}</span><span class="val">${v ? 'ON' : 'OFF'}</span>`;
+    div.innerHTML = '<span>' + names[k] + '</span><span class="val">' + (v ? 'ON' : 'OFF') + '</span>';
     list.appendChild(div);
   }
 }
@@ -833,29 +783,42 @@ function applyFullBright() {
 function updateHealthHud() {
   const hp = Math.max(0, me.hp);
   const el = $('hpNum');
-  el.textContent = hp;
-  el.classList.toggle('low', hp <= 25);
-  el.classList.toggle('mid', hp > 25 && hp <= 60);
-  $('hpBar').style.width = hp + '%';
-  $('hpPct').textContent = hp + '%';
+  if (el) {
+    el.textContent = hp;
+    el.classList.toggle('low', hp <= 25);
+    el.classList.toggle('mid', hp > 25 && hp <= 60);
+  }
+  const hpBar = $('hpBar');
+  if (hpBar) hpBar.style.width = hp + '%';
+  const hpPct = $('hpPct');
+  if (hpPct) hpPct.textContent = hp + '%';
   const a = $('armorBar');
-  a.style.width = Math.max(0, me.armor) + '%';
-  $('armorPct').textContent = Math.max(0, me.armor) + '%';
+  if (a) a.style.width = Math.max(0, me.armor) + '%';
+  const ap = $('armorPct');
+  if (ap) ap.textContent = Math.max(0, me.armor) + '%';
 }
-function updateMoneyHud() { $('moneyHud').textContent = cheats.freeBuy ? '$∞' : '$' + me.money; }
-function updateMatchScoreHud() { $('matchRed').textContent = matchScore.red; $('matchBlue').textContent = matchScore.blue; }
+function updateMoneyHud() {
+  const el = $('moneyHud');
+  if (el) el.textContent = cheats.freeBuy ? '$∞' : '$' + me.money;
+}
+function updateMatchScoreHud() {
+  const r = $('matchRed'); if (r) r.textContent = matchScore.red;
+  const b = $('matchBlue'); if (b) b.textContent = matchScore.blue;
+}
 function updateTimerHud() {
   const el = $('timerText');
+  if (!el) return;
   const s = Math.max(0, Math.ceil(roundTimeLeft / 1000));
   el.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   el.classList.toggle('warning', roundTimeLeft < 20000 && !inBuyPhase);
-  $('phaseText').textContent = inBuyPhase ? 'ЗАКУПКА · ' + Math.max(0, Math.ceil(buyTimeLeft / 1000)) + 'с' : 'В БОЮ';
+  const p = $('phaseText');
+  if (p) p.textContent = inBuyPhase ? 'ЗАКУПКА · ' + Math.max(0, Math.ceil(buyTimeLeft / 1000)) + 'с' : 'В БОЮ';
 }
 function updateGrenadeHud() {
   if (!me.grenades) me.grenades = { he: 0, flash: 0, smoke: 0 };
-  $('gHE')?.classList.toggle('empty', me.grenades.he <= 0);
-  $('gFlash')?.classList.toggle('empty', me.grenades.flash <= 0);
-  $('gSmoke')?.classList.toggle('empty', me.grenades.smoke <= 0);
+  const g1 = $('gHE'); if (g1) g1.classList.toggle('empty', me.grenades.he <= 0);
+  const g2 = $('gFlash'); if (g2) g2.classList.toggle('empty', me.grenades.flash <= 0);
+  const g3 = $('gSmoke'); if (g3) g3.classList.toggle('empty', me.grenades.smoke <= 0);
 }
 
 // ============================================================
@@ -863,12 +826,13 @@ function updateGrenadeHud() {
 // ============================================================
 function addChatMessage(name, team, text) {
   const box = $('chatMessages');
+  if (!box) return;
   const div = document.createElement('div');
   const nick = document.createElement('span');
-  nick.className = `nick ${team === 'red' ? 'r' : 'b'}`;
+  nick.className = 'nick ' + (team === 'red' ? 'r' : 'b');
   nick.textContent = name;
   div.appendChild(nick);
-  div.appendChild(document.createTextNode(`: ${text}`));
+  div.appendChild(document.createTextNode(': ' + text));
   box.appendChild(div);
   while (box.children.length > 8) box.firstChild.remove();
   setTimeout(() => { div.style.opacity = 0; setTimeout(() => div.remove(), 600); }, 9000);
@@ -887,6 +851,7 @@ function closeChat() {
 }
 function sysChat(text) {
   const box = $('chatMessages');
+  if (!box) return;
   const div = document.createElement('div');
   div.className = 'sys';
   div.textContent = text;
@@ -902,25 +867,28 @@ function buildWorld() {
   const blocks = buildMapBlocks();
   const byType = {};
   for (const b of blocks) {
-    (byType[b.type] ||= []).push(b);
-    collision.add(`${b.x},${b.y},${b.z}`);
+    if (!byType[b.type]) byType[b.type] = [];
+    byType[b.type].push(b);
+    collision.add(b.x + ',' + b.y + ',' + b.z);
   }
   const geo = new THREE.BoxGeometry(1, 1, 1);
   const m4 = new THREE.Matrix4();
-  for (const [type, list] of Object.entries(byType)) {
+  for (const type in byType) {
+    if (!byType.hasOwnProperty(type)) continue;
+    const list = byType[type];
     const material = mats[type] || mats.sand;
     const mesh = new THREE.InstancedMesh(geo, material, list.length);
     list.forEach((b, i) => {
       m4.makeTranslation(b.x + 0.5, b.y + 0.5, b.z + 0.5);
       mesh.setMatrixAt(i, m4);
-      mapBlockIndex.set(`${b.x},${b.y},${b.z}`, { mesh, i });
+      mapBlockIndex.set(b.x + ',' + b.y + ',' + b.z, { mesh: mesh, i: i });
     });
     mesh.castShadow = true; mesh.receiveShadow = true;
     scene.add(mesh);
   }
 }
 function placeBlockLocal(x, y, z, team) {
-  const k = `${x},${y},${z}`;
+  const k = x + ',' + y + ',' + z;
   if (collision.has(k)) return;
   collision.add(k);
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mats[team === 'red' ? 'redWool' : 'blueWool']);
@@ -931,7 +899,7 @@ function placeBlockLocal(x, y, z, team) {
 }
 const ZERO_M4 = new THREE.Matrix4().makeScale(0, 0, 0);
 function removeBlockLocal(x, y, z, silent) {
-  const k = `${x},${y},${z}`;
+  const k = x + ',' + y + ',' + z;
   if (!collision.has(k)) return;
   const mesh = placedMeshes.get(k);
   if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); placedMeshes.delete(k); }
@@ -944,7 +912,7 @@ function removeBlockLocal(x, y, z, silent) {
   collision.delete(k);
   if (!silent) { debrisBurst(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5)); SND.brk(); }
 }
-const solid = (x, y, z) => collision.has(`${x},${y},${z}`);
+const solid = (x, y, z) => collision.has(x + ',' + y + ',' + z);
 
 // ============================================================
 // Remote players
@@ -1005,7 +973,7 @@ function makeCharacter(team, name) {
   legL.position.set(-0.13, 0.7, 0); legR.position.set(0.13, 0.7, 0);
   [head, body, armL, armR, legL, legR, gun].forEach(o => { o.castShadow = true; group.add(o); });
   group.add(makeNameSprite(name, team));
-  group.userData = { head, armL, armR, legL, legR, gun };
+  group.userData = { head: head, armL: armL, armR: armR, legL: legL, legR: legR, gun: gun };
   return group;
 }
 function addRemote(p) {
@@ -1016,7 +984,7 @@ function addRemote(p) {
   group.visible = p.alive;
   scene.add(group);
   remotes.set(p.id, {
-    id: p.id, name: p.name, team: p.team, group,
+    id: p.id, name: p.name, team: p.team, group: group,
     target: new THREE.Vector3(p.pos.x, p.pos.y, p.pos.z),
     try: p.ry, trx: p.rx || 0, anim: 0, phase: 0,
     alive: p.alive, hp: p.hp, armor: p.armor || 0,
@@ -1060,7 +1028,7 @@ function runAimbot() {
   const dy = target.y - (me.pos.y + EYE);
   const dz = target.z - me.pos.z;
   me.ry = Math.atan2(-dx, -dz);
-  me.rx = Math.atan2(dy, Math.sqrt(dx*dx + dz*dz));
+  me.rx = Math.atan2(dy, Math.sqrt(dx * dx + dz * dz));
 }
 function updateWallhack() {
   if (!isCheater) return;
@@ -1090,7 +1058,7 @@ function updateWallhack() {
     esp.position.copy(r.group.position);
     esp.position.y += cheats.chams ? 1.0 : 0.9;
   }
-  for (const id of [...cheatESP.keys()]) {
+  for (const id of Array.from(cheatESP.keys())) {
     if (!alive.has(id)) { scene.remove(cheatESP.get(id)); cheatESP.delete(id); }
   }
 }
@@ -1189,18 +1157,20 @@ function raycastVoxels(o, d, maxDist) {
     else if (tmy < tmz) { y += stepY; t = tmy; tmy += tdy; normal = [0, -stepY, 0]; }
     else { z += stepZ; t = tmz; tmz += tdz; normal = [0, 0, -stepZ]; }
     if (t > maxDist) return null;
-    if (solid(x, y, z)) return { x, y, z, dist: t, normal };
+    if (solid(x, y, z)) return { x: x, y: y, z: z, dist: t, normal: normal };
   }
   return null;
 }
 function rayAABB(o, d, min, max) {
   let tmin = 0, tmax = Infinity;
-  for (const ax of ['x', 'y', 'z']) {
-    if (Math.abs(d[ax]) < 1e-9) {
-      if (o[ax] < min[ax] || o[ax] > max[ax]) return null;
+  const ax = ['x', 'y', 'z'];
+  for (let i = 0; i < 3; i++) {
+    const a = ax[i];
+    if (Math.abs(d[a]) < 1e-9) {
+      if (o[a] < min[a] || o[a] > max[a]) return null;
     } else {
-      let t1 = (min[ax] - o[ax]) / d[ax], t2 = (max[ax] - o[ax]) / d[ax];
-      if (t1 > t2) [t1, t2] = [t2, t1];
+      let t1 = (min[a] - o[a]) / d[a], t2 = (max[a] - o[a]) / d[a];
+      if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
       tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
       if (tmin > tmax) return null;
     }
@@ -1246,11 +1216,11 @@ function tryShoot(now) {
     if (bestPlayer) {
       const hitY = origin.y + dir.y * bestT;
       const localY = hitY - bestPlayer.group.position.y;
-      let head = cheats.autoHeadshot || localY > 1.45;
+      const head = cheats.autoHeadshot || localY > 1.45;
       const legs = !head && localY < 0.6;
       let dmg = w.dmg * (head ? 2 : legs ? 0.75 : 1);
       if (cheats.oneShot) dmg = 999;
-      netSend({ t: 'hit', target: bestPlayer.id, dmg: Math.round(dmg), w: wkey, head, legs });
+      netSend({ t: 'hit', target: bestPlayer.id, dmg: Math.round(dmg), w: wkey, head: head, legs: legs });
       bloodBurst(new THREE.Vector3(origin.x + dir.x * bestT, hitY, origin.z + dir.z * bestT));
     } else if (blockHit) {
       debrisBurst(new THREE.Vector3(origin.x + dir.x * blockHit.dist, origin.y + dir.y * blockHit.dist, origin.z + dir.z * blockHit.dist));
@@ -1287,7 +1257,7 @@ function tryPlaceBlock() {
   if (!hit) return;
   const nx = hit.x + hit.normal[0], ny = hit.y + hit.normal[1], nz = hit.z + hit.normal[2];
   if (ny < 1 || ny > 20 || Math.abs(nx) > HALF + 1 || Math.abs(nz) > HALF + 1) return;
-  if (collision.has(`${nx},${ny},${nz}`)) return;
+  if (collision.has(nx + ',' + ny + ',' + nz)) return;
   me.blocks--;
   placeBlockLocal(nx, ny, nz, myTeam);
   netSend({ t: 'place', x: nx, y: ny, z: nz });
@@ -1316,7 +1286,7 @@ function startThrowGrenade(type) {
   if (!me.grenades || !me.grenades[type] || me.grenades[type] <= 0) { sysChat('Нет гранат'); SND.error(); return; }
   throwing = true;
   throwingType = type;
-  sysChat(`Бросаю ${type.toUpperCase()}...`);
+  sysChat('Бросаю ' + type.toUpperCase() + '...');
 }
 function releaseThrowGrenade() {
   if (!throwing || !throwingType) return;
@@ -1331,11 +1301,11 @@ function releaseThrowGrenade() {
   const vy = dir.y * speed + 4;
   const vz = dir.z * speed;
   netSend({
-    t: 'throwGrenade', type,
+    t: 'throwGrenade', type: type,
     x: origin.x + dir.x * 0.5,
     y: origin.y + dir.y * 0.5,
     z: origin.z + dir.z * 0.5,
-    vx, vy, vz,
+    vx: vx, vy: vy, vz: vz,
   });
   spawnGrenadeMesh(type, { x: origin.x + dir.x * 0.5, y: origin.y + dir.y * 0.5, z: origin.z + dir.z * 0.5 }, { x: vx, y: vy, z: vz });
 }
@@ -1347,7 +1317,7 @@ function spawnGrenadeMesh(type, from, vel) {
   mesh.position.set(from.x, from.y, from.z);
   scene.add(mesh);
   grenades.push({
-    mesh, type,
+    mesh: mesh, type: type,
     x: from.x, y: from.y, z: from.z,
     vx: vel.x, vy: vel.y, vz: vel.z,
     ttl: 3,
@@ -1416,7 +1386,8 @@ function spawnSmokeLocal(x, y, z, duration) {
 // FX
 // ============================================================
 function spawnTracer(origin, dir, wkey, dist) {
-  const len = dist !== undefined ? dist : (raycastVoxels(origin, dir, 100)?.dist ?? 100);
+  const hit = raycastVoxels(origin, dir, 100);
+  const len = dist !== undefined ? dist : (hit ? hit.dist : 100);
   const end = origin.clone().addScaledVector(dir, len);
   const start = origin.clone().addScaledVector(dir, 0.8).add(new THREE.Vector3(0, -0.12, 0));
   const g = new THREE.BufferGeometry().setFromPoints([start, end]);
@@ -1431,7 +1402,7 @@ function spawnTracer(origin, dir, wkey, dist) {
 function burst(pos, color, n, spd) {
   for (let i = 0; i < n; i++) {
     const s = 0.05 + Math.random() * 0.06;
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), new THREE.MeshBasicMaterial({ color }));
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), new THREE.MeshBasicMaterial({ color: color }));
     mesh.position.copy(pos);
     scene.add(mesh);
     particles.push({
@@ -1476,7 +1447,9 @@ function buildViewModels() {
     g.add(h);
     return g;
   }
-  { const g = gunBase();
+  // rifle
+  const rifleG = gunBase();
+  {
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.1, 0.5), dark);
     const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, 0.3), dark2);
     barrel.position.set(0, 0.01, -0.38);
@@ -1484,19 +1457,23 @@ function buildViewModels() {
     mag.position.set(0, -0.11, -0.02);
     const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.16), wood);
     stock.position.set(0, -0.01, 0.3);
-    g.add(body, barrel, mag, stock);
-    vm.models.rifle = g;
+    rifleG.add(body, barrel, mag, stock);
+    vm.models.rifle = rifleG;
   }
-  { const g = gunBase();
+  // shotgun
+  const sgG = gunBase();
+  {
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.09, 0.45), wood);
     const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.35), dark);
     barrel.position.set(0, 0.03, -0.35);
     const pump = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.06, 0.14), dark2);
     pump.position.set(0, -0.04, -0.22);
-    g.add(body, barrel, pump);
-    vm.models.shotgun = g;
+    sgG.add(body, barrel, pump);
+    vm.models.shotgun = sgG;
   }
-  { const g = gunBase();
+  // sniper
+  const snG = gunBase();
+  {
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.55), dark);
     const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.45), dark2);
     barrel.position.set(0, 0.02, -0.48);
@@ -1504,33 +1481,39 @@ function buildViewModels() {
     scope.position.set(0, 0.09, -0.05);
     const stock = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.09, 0.18), wood);
     stock.position.set(0, -0.01, 0.33);
-    g.add(body, barrel, scope, stock);
-    vm.models.sniper = g;
+    snG.add(body, barrel, scope, stock);
+    vm.models.sniper = snG;
   }
-  { const g = gunBase();
+  // deagle
+  const dgG = gunBase();
+  {
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.25), dark);
     const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.2), dark2);
     barrel.position.set(0, 0.03, -0.22);
-    g.add(body, barrel);
-    vm.models.deagle = g;
+    dgG.add(body, barrel);
+    vm.models.deagle = dgG;
   }
-  { const g = new THREE.Group();
+  // blocks
+  const blocksG = new THREE.Group();
+  {
     const cube = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.26, 0.26), mats[myTeam === 'red' ? 'redWool' : 'blueWool']);
     cube.rotation.y = 0.5;
-    g.add(cube);
-    vm.models.blocks = g;
+    blocksG.add(cube);
+    vm.models.blocks = blocksG;
   }
-  { const g = gunBase();
+  // pickaxe
+  const pkG = gunBase();
+  {
     const stone = new THREE.MeshLambertMaterial({ color: 0x7a7a7a });
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.55), wood);
     handle.rotation.x = -0.5; handle.position.set(0, 0.05, -0.15);
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.34, 0.09), stone);
     head.rotation.x = -0.5; head.position.set(0, 0.21, -0.38);
-    g.add(handle, head);
-    vm.models.pickaxe = g;
+    pkG.add(handle, head);
+    vm.models.pickaxe = pkG;
   }
   for (const m of Object.values(vm.models)) { vm.group.add(m); m.visible = false; }
-  vm.models[SLOTS[me.slot]]?.visible = true;
+  if (vm.models[SLOTS[me.slot]]) vm.models[SLOTS[me.slot]].visible = true;
 }
 function updateViewModel(dt, moving) {
   if (!vm.group) return;
@@ -1557,7 +1540,9 @@ function selectSlot(i) {
   me.slot = i;
   me.weapon = wkey;
   me.zoomed = false;
-  for (const [k, m] of Object.entries(vm.models)) m.visible = (k === SLOTS[i]);
+  for (const k in vm.models) {
+    if (vm.models.hasOwnProperty(k)) vm.models[k].visible = (k === SLOTS[i]);
+  }
   updateHotbar(); updateAmmoHud();
   tone(420, 0.04, 0.08, 'square');
 }
@@ -1575,10 +1560,11 @@ function updateAmmoHud() {
 }
 function feed(killer, kTeam, victim, vTeam, head, weapon) {
   const kf = $('killfeed');
+  if (!kf) return;
   const div = document.createElement('div');
   div.className = 'kfItem ' + (kTeam === 'red' ? 'red' : 'blue');
-  const wIcon = weapon ? `<span class="weapon">${weapon.toUpperCase()}</span>` : '';
-  div.innerHTML = `<span class="killer">${killer}</span> ${head ? '<span class="hs">[HS]</span>' : ''} ${wIcon} <span class="victim">${victim}</span>`;
+  const wIcon = weapon ? '<span class="weapon">' + weapon.toUpperCase() + '</span>' : '';
+  div.innerHTML = '<span class="killer">' + killer + '</span> ' + (head ? '<span class="hs">[HS]</span>' : '') + ' ' + wIcon + ' <span class="victim">' + victim + '</span>';
   kf.prepend(div);
   while (kf.children.length > 6) kf.lastChild.remove();
   setTimeout(() => div.remove(), 6000);
@@ -1590,16 +1576,18 @@ function showDeathScreen(killerName) {
 }
 function updateScoreboard() {
   const sb = $('scoreboard');
+  if (!sb) return;
   if (!tabHeld) { sb.style.display = 'none'; return; }
   const all = [
     { name: myName + ' (ты)', team: myTeam, kills: me.kills, deaths: me.deaths, me: true },
-    ...[...remotes.values()].map(r => ({ name: r.name, team: r.team, kills: r.kills, deaths: r.deaths })),
   ];
-  const row = p => `<tr><td class="${p.me ? 'me' : ''}">${p.name}</td><td>${p.kills}</td><td>${p.deaths}</td></tr>`;
-  const table = list => `<table><tr><th>ИГРОК</th><th>УБИЙСТВА</th><th>СМЕРТИ</th></tr>${list.sort((a,b) => b.kills - a.kills).map(row).join('')}</table>`;
-  sb.innerHTML =
-    `<h3 class="red">КРАСНЫЕ — ${matchScore.red}</h3>` + table(all.filter(p => p.team === 'red')) +
-    `<h3 class="blue">СИНИЕ — ${matchScore.blue}</h3>` + table(all.filter(p => p.team === 'blue'));
+  for (const r of remotes.values()) {
+    all.push({ name: r.name, team: r.team, kills: r.kills, deaths: r.deaths, me: false });
+  }
+  const row = p => '<tr><td class="' + (p.me ? 'me' : '') + '">' + p.name + '</td><td>' + p.kills + '</td><td>' + p.deaths + '</td></tr>';
+  const table = list => '<table><tr><th>ИГРОК</th><th>УБИЙСТВА</th><th>СМЕРТИ</th></tr>' + list.sort((a, b) => b.kills - a.kills).map(row).join('') + '</table>';
+  sb.innerHTML = '<h3 class="red">КРАСНЫЕ — ' + matchScore.red + '</h3>' + table(all.filter(p => p.team === 'red')) +
+    '<h3 class="blue">СИНИЕ — ' + matchScore.blue + '</h3>' + table(all.filter(p => p.team === 'blue'));
   sb.style.display = 'block';
 }
 
@@ -1610,7 +1598,7 @@ function updateRadar() {
   const canvas = $('radarCanvas');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height, cx = W/2, cy = H/2;
+  const W = canvas.width, H = canvas.height, cx = W / 2, cy = H / 2;
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = 'rgba(15,20,15,0.85)';
   ctx.fillRect(0, 0, W, H);
@@ -1628,9 +1616,9 @@ function updateRadar() {
     const cs = Math.cos(-me.ry), sn = Math.sin(-me.ry);
     const rx = (dx * cs - dz * sn) * scale;
     const rz = (dx * sn + dz * cs) * scale;
-    if (Math.abs(rx) > W/2 || Math.abs(rz) > H/2) continue;
+    if (Math.abs(rx) > W / 2 || Math.abs(rz) > H / 2) continue;
     ctx.fillStyle = '#ff3333';
-    ctx.beginPath(); ctx.arc(rx, rz, 5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(rx, rz, 5, 0, Math.PI * 2); ctx.fill();
   }
   if (activeBomb) {
     const dx = activeBomb.x - me.pos.x;
@@ -1638,9 +1626,9 @@ function updateRadar() {
     const cs = Math.cos(-me.ry), sn = Math.sin(-me.ry);
     const rx = (dx * cs - dz * sn) * scale;
     const rz = (dx * sn + dz * cs) * scale;
-    if (Math.abs(rx) < W/2 && Math.abs(rz) < H/2) {
+    if (Math.abs(rx) < W / 2 && Math.abs(rz) < H / 2) {
       ctx.fillStyle = '#ffaa00';
-      ctx.beginPath(); ctx.arc(rx, rz, 7, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(rx, rz, 7, 0, Math.PI * 2); ctx.fill();
     }
   }
   ctx.fillStyle = '#44ff44';
@@ -1708,7 +1696,7 @@ function showPlantProgress() {
     if (!planting) return;
     const pct = Math.min(100, ((Date.now() - plantStartTime) / plantDuration) * 100);
     fill.style.width = pct + '%';
-    label.textContent = `ЗАКЛАДКА ${pct.toFixed(0)}%`;
+    label.textContent = 'ЗАКЛАДКА ' + pct.toFixed(0) + '%';
     if (pct >= 100) finishPlant();
   }, 50);
 }
@@ -1717,7 +1705,7 @@ function startDefuse() {
   if (myTeam !== 'blue') { sysChat('⚠️ Разминируют только СИНИЕ!'); SND.error(); return; }
   const dx = me.pos.x - activeBomb.x;
   const dz = me.pos.z - activeBomb.z;
-  if (Math.sqrt(dx*dx + dz*dz) > 3) { sysChat('⚠️ Слишком далеко!'); SND.error(); return; }
+  if (Math.sqrt(dx * dx + dz * dz) > 3) { sysChat('⚠️ Слишком далеко!'); SND.error(); return; }
   if (defusing) return;
   defusing = true;
   defuseStartTime = Date.now();
@@ -1742,7 +1730,7 @@ function showDefuseProgress() {
     if (!defusing) return;
     const pct = Math.min(100, ((Date.now() - defuseStartTime) / defuseDuration) * 100);
     fill.style.width = pct + '%';
-    label.textContent = `РАЗМИНИРОВАНИЕ ${pct.toFixed(0)}%`;
+    label.textContent = 'РАЗМИНИРОВАНИЕ ' + pct.toFixed(0) + '%';
     if (pct >= 100) finishDefuse();
   }, 50);
 }
@@ -1799,11 +1787,11 @@ function initMobileControls() {
   document.addEventListener('touchend', e => {
     for (const t of e.changedTouches) if (t.identifier === touchLookId) touchLookId = null;
   });
-  fireBtn?.addEventListener('touchstart', e => { e.preventDefault(); mouseDown = true; tryShoot(performance.now()); });
-  fireBtn?.addEventListener('touchend', e => { e.preventDefault(); mouseDown = false; });
-  reloadBtn?.addEventListener('touchstart', e => { e.preventDefault(); startReload(); });
-  jumpBtn?.addEventListener('touchstart', e => { e.preventDefault(); keys['Space'] = true; setTimeout(() => keys['Space'] = false, 100); });
-  bombBtn?.addEventListener('touchstart', e => {
+  fireBtn.addEventListener('touchstart', e => { e.preventDefault(); mouseDown = true; tryShoot(performance.now()); });
+  fireBtn.addEventListener('touchend', e => { e.preventDefault(); mouseDown = false; });
+  reloadBtn.addEventListener('touchstart', e => { e.preventDefault(); startReload(); });
+  jumpBtn.addEventListener('touchstart', e => { e.preventDefault(); keys['Space'] = true; setTimeout(() => keys['Space'] = false, 100); });
+  bombBtn.addEventListener('touchstart', e => {
     e.preventDefault();
     if (activeBomb) startDefuse();
     else if (!planting) startPlant();
@@ -1811,9 +1799,9 @@ function initMobileControls() {
 }
 function updateJoystick(tx, ty, center, radius, knob) {
   let dx = tx - center.x, dy = ty - center.y;
-  const dist = Math.sqrt(dx*dx + dy*dy);
+  const dist = Math.sqrt(dx * dx + dy * dy);
   if (dist > radius) { dx = dx / dist * radius; dy = dy / dist * radius; }
-  if (knob) knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  if (knob) knob.style.transform = 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px))';
   joystickVector.x = dx / radius;
   joystickVector.y = dy / radius;
 }
@@ -1919,8 +1907,8 @@ function setupInput() {
   document.querySelectorAll('#cheatMenu .cheatItem').forEach(el => {
     el.addEventListener('click', () => toggleCheat(el.dataset.cheat));
   });
-  $('cheatMenuClose')?.addEventListener('click', closeCheatMenu);
-  $('cheatMenuBtn')?.addEventListener('click', openCheatMenu);
+  $('cheatMenuClose').addEventListener('click', closeCheatMenu);
+  $('cheatMenuBtn').addEventListener('click', openCheatMenu);
   document.querySelectorAll('#modeSelect button').forEach(b => {
     b.addEventListener('click', () => {
       if (!isCheater) return;
@@ -1933,20 +1921,20 @@ function setupInput() {
       updateModalUI();
     });
   });
-  $('modalCancel')?.addEventListener('click', closePlayModal);
-  $('modalPlay')?.addEventListener('click', () => { connectAndPlay(); });
-  $('createLobbyBtn')?.addEventListener('click', createLobby);
-  $('quickPlayBtn2')?.addEventListener('click', () => { closePlayModal(); connectAndPlay(); });
-  $('joinLobbyBtn')?.addEventListener('click', () => {
+  $('modalCancel').addEventListener('click', closePlayModal);
+  $('modalPlay').addEventListener('click', connectAndPlay);
+  $('createLobbyBtn').addEventListener('click', createLobby);
+  $('quickPlayBtn2').addEventListener('click', () => { closePlayModal(); connectAndPlay(); });
+  $('joinLobbyBtn').addEventListener('click', () => {
     const code = $('lobbyCodeInput').value.trim();
     if (code) joinLobbyByCode(code);
   });
-  $('addFriendBtn')?.addEventListener('click', () => {
+  $('addFriendBtn').addEventListener('click', () => {
     const name = $('friendNameInput').value.trim();
     if (name) { addFriendByName(name); $('friendNameInput').value = ''; }
   });
-  $('lobbyCodeInput')?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { joinLobbyByCode(e.target.value); }
+  $('lobbyCodeInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') joinLobbyByCode(e.target.value);
   });
 }
 function setTalking(on) {
@@ -2066,6 +2054,13 @@ function loop() {
 }
 
 // ============================================================
+// START
+// ============================================================
+window.acceptFriend = acceptFriend;
+window.declineFriend = declineFriend;
+window.inviteFriend = inviteFriend;
+window.acceptLobbyInvite = acceptLobbyInvite;
+
 loadSettings();
 setupAuth();
 setupMenu();
