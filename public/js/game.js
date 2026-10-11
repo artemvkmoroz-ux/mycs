@@ -9,7 +9,7 @@ const EYE = 1.62, P_HALF = 0.3, P_HEIGHT = 1.8;
 const GRAVITY = 23, JUMP_V = 8.6, WALK = 5.8, SPRINT = 8.4;
 
 const WEAPONS = {
-  rifle:   { name: 'AK-47',    dmg: 18, rate: 110,  mag: 30, reload: 1800, spread: 0.014, auto: true,  pellets: 1, range: 90 },
+  rifle:   { name: 'АВТОМАТ',  dmg: 18, rate: 110,  mag: 30, reload: 1800, spread: 0.014, auto: true,  pellets: 1, range: 90 },
   shotgun: { name: 'ДРОБОВИК', dmg: 9,  rate: 850,  mag: 6,  reload: 2200, spread: 0.06,  auto: false, pellets: 8, range: 32 },
   sniper:  { name: 'AWP',      dmg: 70, rate: 1400, mag: 5,  reload: 2400, spread: 0.002, auto: false, pellets: 1, range: 140 },
   deagle:  { name: 'DEAGLE',   dmg: 45, rate: 400,  mag: 7,  reload: 2000, spread: 0.01,  auto: false, pellets: 1, range: 100 },
@@ -27,7 +27,6 @@ const SETTINGS = {
   mobile: false, radar: false, showFps: false,
   sensitivity: 2.0, volume: 0.5, quality: 'medium',
 };
-
 function loadSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem('blockade_settings') || '{}');
@@ -111,10 +110,28 @@ let defuseStartTime = 0;
 let defuseDuration = 5000;
 let defuseProgressInterval = null;
 
+// ============================================================
+// ЧИТЫ (только для moroz)
+// ============================================================
 let isCheater = false;
-let aimbotOn = false;
-let wallhackOn = false;
+const cheats = {
+  aimbot: false,
+  wallhack: false,
+  speedhack: false,
+  noclip: false,
+  infiniteAmmo: false,
+  infiniteHp: false,
+  rapidFire: false,
+  autoHeadshot: false,
+  fullBright: false,
+  oneShot: false,
+  freeBuy: false,
+  instantPlant: false,
+  instantDefuse: false,
+  chams: false,
+};
 const cheatESP = new Map();
+let cheatsMenuOpen = false;
 
 let fpsFrames = 0, fpsLast = performance.now();
 
@@ -184,16 +201,12 @@ const SND = {
 const $ = id => document.getElementById(id);
 
 function setupAuth() {
-  const nameInput = $('regName');
-  const passInput = $('regPassword');
-  const btn = $('regBtn');
-  const err = $('authErr');
+  const nameInput = $('regName'), passInput = $('regPassword'), btn = $('regBtn'), err = $('authErr');
   nameInput.value = localStorage.getItem('blockade_name') || '';
   passInput.value = localStorage.getItem('blockade_password') || '';
   nameInput.focus();
   const start = () => {
-    const name = nameInput.value.trim();
-    const pass = passInput.value.trim();
+    const name = nameInput.value.trim(), pass = passInput.value.trim();
     if (name.length < 2) { err.textContent = 'Ник минимум 2 символа!'; return; }
     if (pass.length < 3) { err.textContent = 'Пароль минимум 3 символа!'; return; }
     err.textContent = '';
@@ -207,7 +220,6 @@ function setupAuth() {
   passInput.addEventListener('keydown', e => { if (e.key === 'Enter') start(); });
   nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') passInput.focus(); });
 }
-
 function showMenu(name) {
   $('authScreen').style.display = 'none';
   $('settings').style.display = 'none';
@@ -217,13 +229,11 @@ function showMenu(name) {
   $('userAvatar').textContent = name.charAt(0).toUpperCase();
   $('playBtn').disabled = false;
 }
-
 function showAuth() {
   $('authScreen').style.display = 'flex';
   $('menu').style.display = 'none';
   $('settings').style.display = 'none';
 }
-
 function setupMenu() {
   const err = $('menuErr');
   const startConnect = () => {
@@ -260,7 +270,7 @@ function setupMenu() {
 // ============================================================
 function openBuyMenu() {
   if (!inGame || me.dead || buyMenuOpen) return;
-  if (!inBuyPhase) { sysChat('⚠️ Закупка только в начале раунда!'); return; }
+  if (!inBuyPhase && !cheats.freeBuy) { sysChat('⚠️ Закупка только в начале раунда!'); return; }
   buyMenuOpen = true;
   $('buyMenu').classList.add('active');
   updateBuyMenu();
@@ -272,26 +282,85 @@ function closeBuyMenu() {
   if (inGame && !me.dead) renderer.domElement.requestPointerLock();
 }
 function updateBuyMenu() {
-  $('buyMoneyVal').textContent = me.money;
+  $('buyMoneyVal').textContent = cheats.freeBuy ? '∞' : me.money;
   document.querySelectorAll('#buyMenu .buyItem').forEach(el => {
     const item = el.dataset.item;
     const prices = { rifle: 2700, shotgun: 1200, sniper: 4750, deagle: 700, armor: 1000, he: 300 };
     const price = prices[item];
     const owned = me.weapons[item] || (item === 'armor' && me.armor > 0);
-    el.classList.toggle('disabled', me.money < price || owned);
+    const disabled = !cheats.freeBuy && (me.money < price || owned);
+    el.classList.toggle('disabled', disabled);
     if (owned) {
       el.querySelector('.price').textContent = '✓ Куплено';
       el.querySelector('.price').style.color = '#888';
     } else {
-      el.querySelector('.price').textContent = '$' + price;
-      el.querySelector('.price').style.color = '#6ab04c';
+      el.querySelector('.price').textContent = cheats.freeBuy ? 'FREE' : '$' + price;
+      el.querySelector('.price').style.color = cheats.freeBuy ? '#f0ad4e' : '#6ab04c';
     }
   });
 }
 function buyItem(item) {
-  if (!inBuyPhase) { SND.error(); sysChat('⚠️ Закупка только в начале раунда!'); return; }
+  if (!inBuyPhase && !cheats.freeBuy) { SND.error(); sysChat('⚠️ Закупка только в начале раунда!'); return; }
   if (!item) return;
+  if (cheats.freeBuy) {
+    // Мгновенно выдаём
+    if (item === 'armor') me.armor = 100;
+    else { me.weapons[item] = true; me.weapon = item; me.slot = SLOTS.indexOf(item); }
+    updateBuyMenu(); updateHealthHud(); updateAmmoHud(); updateHotbar();
+    SND.buy();
+    return;
+  }
   netSend({ t: 'buy', item });
+}
+
+// ============================================================
+// Cheat Menu UI
+// ============================================================
+function openCheatMenu() {
+  if (!isCheater) return;
+  cheatsMenuOpen = true;
+  $('cheatMenu').classList.add('active');
+  updateCheatMenu();
+  if (document.pointerLockElement) document.exitPointerLock();
+}
+function closeCheatMenu() {
+  cheatsMenuOpen = false;
+  $('cheatMenu').classList.remove('active');
+  if (inGame && !me.dead && !buyMenuOpen) renderer.domElement.requestPointerLock();
+}
+function updateCheatMenu() {
+  document.querySelectorAll('#cheatMenu .cheatItem').forEach(el => {
+    const key = el.dataset.cheat;
+    el.classList.toggle('active', cheats[key]);
+    const val = el.querySelector('.val');
+    if (val) val.textContent = cheats[key] ? 'ON' : 'OFF';
+  });
+}
+function toggleCheat(name) {
+  if (!isCheater) return;
+  cheats[name] = !cheats[name];
+  updateCheatMenu();
+  updateCheatPanel();
+  sysChat(`[ЧИТ] ${name}: ${cheats[name] ? 'ВКЛ' : 'ВЫКЛ'}`);
+}
+function updateCheatPanel() {
+  if (!isCheater) return;
+  const list = $('cheatPanelList');
+  if (!list) return;
+  const names = {
+    aimbot: 'Aimbot', wallhack: 'Wallhack', speedhack: 'Speedhack',
+    noclip: 'NoClip', infiniteAmmo: 'InfAmmo', infiniteHp: 'InfHP',
+    rapidFire: 'RapidFire', autoHeadshot: 'AutoHS', fullBright: 'FullBright',
+    oneShot: 'OneShot', freeBuy: 'FreeBuy', instantPlant: 'FastPlant',
+    instantDefuse: 'FastDefuse', chams: 'Chams',
+  };
+  list.innerHTML = '';
+  for (const [k, v] of Object.entries(cheats)) {
+    const div = document.createElement('div');
+    div.className = 'cheatRow' + (v ? ' active' : '');
+    div.innerHTML = `<span>${names[k]}</span><span class="val">${v ? 'ON' : 'OFF'}</span>`;
+    list.appendChild(div);
+  }
 }
 
 // ============================================================
@@ -306,8 +375,7 @@ function connect(name, password) {
   ws.onclose = () => {
     if (inGame) {
       inGame = false;
-      closeChat();
-      closeAllVoice();
+      closeChat(); closeAllVoice();
       document.exitPointerLock();
       $('hud').style.display = 'none';
       $('menu').style.display = 'flex';
@@ -342,6 +410,10 @@ function handleMsg(m) {
       initVoice();
       if (SETTINGS.mobile) initMobileControls();
       updateMoneyHud(); updateHealthHud(); updateMatchScoreHud();
+      if (isCheater) {
+        sysChat('🔥 ЧИТ-ПАНЕЛЬ АКТИВНА. Нажми ПРАВЫЙ CTRL для меню.');
+        updateCheatPanel();
+      }
       break;
     }
     case 'join': addRemote(m.p); break;
@@ -371,17 +443,16 @@ function handleMsg(m) {
       if (r) r.shootAnim = 0.12;
       break;
     }
-    case 'hp':
+    case 'hp': {
+      if (cheats.infiniteHp) break;
       me.hp = m.hp; me.armor = m.armor || 0;
-      updateHealthHud();
-      SND.hurt();
+      updateHealthHud(); SND.hurt();
       const v = $('dmgVignette');
       v.style.opacity = 1; setTimeout(() => v.style.opacity = 0, 120);
       break;
-    case 'armorUpdate':
-      me.armor = m.armor; updateHealthHud(); break;
-    case 'moneyUpdate':
-      me.money = m.money; updateMoneyHud(); break;
+    }
+    case 'armorUpdate': me.armor = m.armor; updateHealthHud(); break;
+    case 'moneyUpdate': me.money = m.money; updateMoneyHud(); break;
     case 'hitconfirm': {
       const hm = $('hitmarker');
       hm.classList.toggle('head', m.head);
@@ -398,17 +469,12 @@ function handleMsg(m) {
       const kName = killer ? killer.name : myName;
       const kTeam = killer ? killer.team : myTeam;
       feed(kName, kTeam, vName, vTeam, m.head, m.w);
-      if (victim) {
-        victim.alive = false; victim.deaths++;
-        deathBurst(victim.group.position);
-        victim.group.visible = false;
-      }
+      if (victim) { victim.alive = false; victim.deaths++; deathBurst(victim.group.position); victim.group.visible = false; }
       if (killer) killer.kills++;
       if (m.victim === myId) {
+        if (cheats.infiniteHp) { me.hp = 100; updateHealthHud(); break; }
         me.hp = 0; me.dead = true; me.deaths++;
-        updateHealthHud();
-        SND.death();
-        showDeathScreen(kName);
+        updateHealthHud(); SND.death(); showDeathScreen(kName);
       }
       if (m.killer === myId) { me.kills++; SND.kill(); }
       break;
@@ -429,19 +495,13 @@ function handleMsg(m) {
         SND.spawn();
       } else {
         const r = remotes.get(m.id);
-        if (r) {
-          r.alive = true; r.hp = 100; r.armor = 0;
-          r.group.position.set(m.pos.x, m.pos.y, m.pos.z);
-          r.target.set(m.pos.x, m.pos.y, m.pos.z);
-          r.group.visible = true;
-        }
+        if (r) { r.alive = true; r.hp = 100; r.armor = 0; r.group.position.set(m.pos.x, m.pos.y, m.pos.z); r.target.set(m.pos.x, m.pos.y, m.pos.z); r.group.visible = true; }
       }
       break;
     }
     case 'place': placeBlockLocal(m.x, m.y, m.z, m.team); break;
     case 'destroy': removeBlockLocal(m.x, m.y, m.z); break;
     case 'rtc': handleRtcSignal(m.from, m.data); break;
-
     case 'roundStart':
       matchScore = m.matchScore || matchScore;
       roundTimeLeft = m.roundTime || 115000;
@@ -479,11 +539,7 @@ function handleMsg(m) {
       let cd = 8;
       const cdEl = $('matchCountdown');
       cdEl.textContent = cd;
-      const iv = setInterval(() => {
-        cd--;
-        if (cd < 0) { clearInterval(iv); return; }
-        cdEl.textContent = cd;
-      }, 1000);
+      const iv = setInterval(() => { cd--; if (cd < 0) { clearInterval(iv); return; } cdEl.textContent = cd; }, 1000);
       break;
     }
     case 'newMatch':
@@ -491,7 +547,6 @@ function handleMsg(m) {
       matchScore = { red: 0, blue: 0 };
       updateMatchScoreHud();
       break;
-
     case 'bought':
       me.money = m.money;
       me.armor = m.armor;
@@ -499,12 +554,8 @@ function handleMsg(m) {
       updateMoneyHud(); updateHealthHud(); updateBuyMenu();
       SND.buy();
       break;
-    case 'buyError':
-      sysChat('⚠️ ' + m.text);
-      SND.error();
-      break;
-
-    case 'plantStarted': plantDuration = m.duration || 3000; break;
+    case 'buyError': sysChat('⚠️ ' + m.text); SND.error(); break;
+    case 'plantStarted': plantDuration = cheats.instantPlant ? 100 : (m.duration || 3000); break;
     case 'plantCancelled':
       planting = false;
       clearInterval(plantProgressInterval); plantProgressInterval = null;
@@ -537,7 +588,7 @@ function handleMsg(m) {
       sysChat('🔧 БОМБА РАЗМИНИРОВАНА!');
       break;
     case 'bombError': sysChat('⚠️ ' + m.text); break;
-    case 'defuseStarted': defuseDuration = m.duration || 5000; break;
+    case 'defuseStarted': defuseDuration = cheats.instantDefuse ? 100 : (m.duration || 5000); break;
     case 'defuseCancelled':
       defusing = false;
       clearInterval(defuseProgressInterval); defuseProgressInterval = null;
@@ -548,7 +599,7 @@ function handleMsg(m) {
 }
 
 // ============================================================
-// HUD update
+// HUD
 // ============================================================
 function updateHealthHud() {
   const hp = Math.max(0, me.hp);
@@ -562,11 +613,8 @@ function updateHealthHud() {
   a.style.width = Math.max(0, me.armor) + '%';
   $('armorPct').textContent = Math.max(0, me.armor) + '%';
 }
-function updateMoneyHud() { $('moneyHud').textContent = '$' + me.money; }
-function updateMatchScoreHud() {
-  $('matchRed').textContent = matchScore.red;
-  $('matchBlue').textContent = matchScore.blue;
-}
+function updateMoneyHud() { $('moneyHud').textContent = cheats.freeBuy ? '$∞' : '$' + me.money; }
+function updateMatchScoreHud() { $('matchRed').textContent = matchScore.red; $('matchBlue').textContent = matchScore.blue; }
 function updateTimerHud() {
   const el = $('timerText');
   const s = Math.max(0, Math.ceil(roundTimeLeft / 1000));
@@ -613,7 +661,7 @@ function sysChat(text) {
 }
 
 // ============================================================
-// Voice
+// Voice (упрощённо)
 // ============================================================
 const voicePeers = new Map();
 let micStream = null, micTrack = null, voiceFailed = false;
@@ -621,63 +669,17 @@ let micStream = null, micTrack = null, voiceFailed = false;
 async function initVoice() {
   if (!micStream && !voiceFailed) {
     try {
-      micStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       micTrack = micStream.getAudioTracks()[0];
       micTrack.enabled = false;
       sysChat('🎤 V — говорить');
     } catch { voiceFailed = true; }
   }
-  for (const id of remotes.keys()) makeVoicePeer(id, true);
 }
-function makeVoicePeer(id, initiator) {
-  let p = voicePeers.get(id);
-  if (p) return p;
-  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-  const audio = new Audio(); audio.autoplay = true;
-  p = { pc, audio, pendingIce: [] };
-  voicePeers.set(id, p);
-  if (micStream) for (const tr of micStream.getTracks()) pc.addTrack(tr, micStream);
-  else pc.addTransceiver('audio', { direction: 'recvonly' });
-  pc.onicecandidate = e => { if (e.candidate) netSend({ t: 'rtc', to: id, data: { ice: e.candidate } }); };
-  pc.ontrack = e => { audio.srcObject = e.streams[0]; audio.play().catch(() => {}); };
-  if (initiator) {
-    pc.createOffer().then(o => pc.setLocalDescription(o))
-      .then(() => netSend({ t: 'rtc', to: id, data: { sdp: pc.localDescription } }))
-      .catch(() => {});
-  }
-  return p;
-}
-async function handleRtcSignal(from, data) {
-  if (!data) return;
-  try {
-    const p = makeVoicePeer(from, false);
-    const pc = p.pc;
-    if (data.sdp) {
-      await pc.setRemoteDescription(data.sdp);
-      for (const c of p.pendingIce) await pc.addIceCandidate(c).catch(() => {});
-      p.pendingIce.length = 0;
-      if (data.sdp.type === 'offer') {
-        const ans = await pc.createAnswer();
-        await pc.setLocalDescription(ans);
-        netSend({ t: 'rtc', to: from, data: { sdp: pc.localDescription } });
-      }
-    } else if (data.ice) {
-      if (pc.remoteDescription) await pc.addIceCandidate(data.ice).catch(() => {});
-      else p.pendingIce.push(data.ice);
-    }
-  } catch {}
-}
-function closeVoicePeer(id) {
-  const p = voicePeers.get(id);
-  if (!p) return;
-  try { p.pc.close(); } catch {}
-  p.audio.srcObject = null;
-  voicePeers.delete(id);
-}
+function makeVoicePeer() {}
+function handleRtcSignal() {}
+function closeVoicePeer() {}
 function closeAllVoice() {
-  for (const id of [...voicePeers.keys()]) closeVoicePeer(id);
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; micTrack = null; }
   setTalking(false);
 }
@@ -700,7 +702,8 @@ function buildWorld() {
   const geo = new THREE.BoxGeometry(1, 1, 1);
   const m4 = new THREE.Matrix4();
   for (const [type, list] of Object.entries(byType)) {
-    const mesh = new THREE.InstancedMesh(geo, mats[type], list.length);
+    const material = mats[type] || mats.sand;
+    const mesh = new THREE.InstancedMesh(geo, material, list.length);
     list.forEach((b, i) => {
       m4.makeTranslation(b.x + 0.5, b.y + 0.5, b.z + 0.5);
       mesh.setMatrixAt(i, m4);
@@ -771,7 +774,6 @@ function makeNameSprite(name, team) {
   sp.position.y = 2.45;
   return sp;
 }
-
 function makeCharacter(team, name) {
   const group = new THREE.Group();
   const skin = new THREE.MeshLambertMaterial({ color: 0xd8a37a });
@@ -800,7 +802,6 @@ function makeCharacter(team, name) {
   group.userData = { head, armL, armR, legL, legR, gun };
   return group;
 }
-
 function addRemote(p) {
   if (remotes.has(p.id)) return;
   const group = makeCharacter(p.team, p.name);
@@ -816,12 +817,9 @@ function addRemote(p) {
     kills: p.kills || 0, deaths: p.deaths || 0, shootAnim: 0,
   });
 }
-
 function updateRemotes(dt) {
   const k = Math.min(1, dt * 14);
   for (const r of remotes.values()) {
-    const vp = voicePeers.get(r.id);
-    if (vp) vp.audio.volume = Math.max(0.15, Math.min(1, 1.25 - r.group.position.distanceTo(me.pos) / 50)) * SETTINGS.volume * 2;
     if (!r.alive) continue;
     r.group.position.lerp(r.target, k);
     let dy = (r.try + Math.PI) - r.group.rotation.y;
@@ -839,28 +837,10 @@ function updateRemotes(dt) {
 }
 
 // ============================================================
-// Читы
+// ЧИТЫ — ФУНКЦИИ
 // ============================================================
-function setupCheats() {
-  if (!isCheater) { $('cheatPanel').style.display = 'none'; return; }
-  $('cheatPanel').style.display = 'flex';
-  sysChat('🔥 ЧИТ-ПАНЕЛЬ: X — aimbot, Z — wallhack');
-}
-function toggleAimbot() {
-  if (!isCheater) return;
-  aimbotOn = !aimbotOn;
-  $('cheatAimVal').textContent = aimbotOn ? 'ON' : 'OFF';
-  $('cheatAim').classList.toggle('active', aimbotOn);
-}
-function toggleWallhack() {
-  if (!isCheater) return;
-  wallhackOn = !wallhackOn;
-  $('cheatWallVal').textContent = wallhackOn ? 'ON' : 'OFF';
-  $('cheatWall').classList.toggle('active', wallhackOn);
-  if (!wallhackOn) { for (const m of cheatESP.values()) scene.remove(m); cheatESP.clear(); }
-}
 function runAimbot() {
-  if (!aimbotOn || !isCheater) return;
+  if (!cheats.aimbot || !isCheater) return;
   let best = null, bestDist = Infinity;
   for (const r of remotes.values()) {
     if (!r.alive || r.team === myTeam) continue;
@@ -868,7 +848,8 @@ function runAimbot() {
     if (d < bestDist) { bestDist = d; best = r; }
   }
   if (!best) return;
-  const target = best.group.position.clone(); target.y += 1.2;
+  const target = best.group.position.clone();
+  target.y += cheats.autoHeadshot ? 1.7 : 1.2;
   const dx = target.x - me.pos.x;
   const dy = target.y - (me.pos.y + EYE);
   const dz = target.z - me.pos.z;
@@ -877,7 +858,8 @@ function runAimbot() {
 }
 function updateWallhack() {
   if (!isCheater) return;
-  if (!wallhackOn) {
+  const showESP = cheats.wallhack || cheats.chams;
+  if (!showESP) {
     for (const m of cheatESP.values()) scene.remove(m);
     cheatESP.clear(); return;
   }
@@ -890,25 +872,43 @@ function updateWallhack() {
     alive.add(r.id);
     let esp = cheatESP.get(r.id);
     if (!esp) {
-      const geo = new THREE.BoxGeometry(1.2, 2.6, 1.2);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true, transparent: true, opacity: 0.9, depthTest: false });
+      const geo = cheats.chams
+        ? new THREE.BoxGeometry(0.9, 2.1, 0.9)
+        : new THREE.BoxGeometry(1.2, 2.6, 1.2);
+      const mat = cheats.chams
+        ? new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: false, depthTest: false })
+        : new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true, transparent: true, opacity: 0.9, depthTest: false });
       esp = new THREE.Mesh(geo, mat);
       esp.renderOrder = 999;
       scene.add(esp);
       cheatESP.set(r.id, esp);
     }
     esp.position.copy(r.group.position);
-    esp.position.y += 0.9;
+    esp.position.y += cheats.chams ? 1.0 : 0.9;
   }
   for (const id of [...cheatESP.keys()]) {
     if (!alive.has(id)) { scene.remove(cheatESP.get(id)); cheatESP.delete(id); }
   }
+}
+function teleportToEnemy() {
+  if (!isCheater) return;
+  let best = null, bestDist = Infinity;
+  for (const r of remotes.values()) {
+    if (!r.alive || r.team === myTeam) continue;
+    const d = r.group.position.distanceTo(me.pos);
+    if (d < bestDist) { bestDist = d; best = r; }
+  }
+  if (!best) { sysChat('Нет врагов'); return; }
+  me.pos.copy(best.group.position);
+  me.pos.y += 1;
+  sysChat('⚡ Телепорт к врагу');
 }
 
 // ============================================================
 // Physics
 // ============================================================
 function collideAxis(pos) {
+  if (cheats.noclip) return false;
   const minX = Math.floor(pos.x - P_HALF), maxX = Math.floor(pos.x + P_HALF);
   const minY = Math.floor(pos.y), maxY = Math.floor(pos.y + P_HEIGHT - 0.001);
   const minZ = Math.floor(pos.z - P_HALF), maxZ = Math.floor(pos.z + P_HALF);
@@ -920,7 +920,7 @@ function collideAxis(pos) {
 }
 function movePlayer(dt) {
   if (SETTINGS.mobile && joystickActive) {
-    const speed = SPRINT;
+    const speed = SPRINT * (cheats.speedhack ? 3 : 1);
     const forward = new THREE.Vector3(-Math.sin(me.ry), 0, -Math.cos(me.ry));
     const right = new THREE.Vector3(Math.cos(me.ry), 0, -Math.sin(me.ry));
     const move = new THREE.Vector3();
@@ -934,7 +934,7 @@ function movePlayer(dt) {
     me.vel.z += (move.z - me.vel.z) * Math.min(1, accel * dt);
   } else {
     const sprint = keys['ShiftLeft'] || keys['ShiftRight'];
-    const speed = sprint ? SPRINT : WALK;
+    const speed = (sprint ? SPRINT : WALK) * (cheats.speedhack ? 3 : 1);
     let fx = 0, fz = 0;
     if (keys['KeyW']) fz -= 1;
     if (keys['KeyS']) fz += 1;
@@ -951,7 +951,7 @@ function movePlayer(dt) {
     me.vel.x += (wishX - me.vel.x) * Math.min(1, accel * dt);
     me.vel.z += (wishZ - me.vel.z) * Math.min(1, accel * dt);
   }
-  me.vel.y -= GRAVITY * dt;
+  if (!cheats.noclip) me.vel.y -= GRAVITY * dt;
   if (keys['Space'] && me.onGround) { me.vel.y = JUMP_V; me.onGround = false; }
   const p = me.pos;
   p.x += me.vel.x * dt;
@@ -1008,17 +1008,17 @@ function rayAABB(o, d, min, max) {
 // Weapons
 // ============================================================
 function currentWeapon() { return WEAPONS[me.weapon || 'rifle'] || WEAPONS.rifle; }
-
 function tryShoot(now) {
   const wkey = me.weapon || 'rifle';
   const w = WEAPONS[wkey] || WEAPONS.rifle;
   if (me.dead || me.reloading || planting || defusing || buyMenuOpen) return;
   if (w.builder) { tryPlaceBlock(); return; }
   if (w.tool) { tryBreakBlock(); return; }
-  if (now - me.lastShot < w.rate) return;
-  if ((me.ammo[wkey] || 0) <= 0) { startReload(); return; }
+  const rate = cheats.rapidFire ? 30 : w.rate;
+  if (now - me.lastShot < rate) return;
+  if (!cheats.infiniteAmmo && (me.ammo[wkey] || 0) <= 0) { startReload(); return; }
   me.lastShot = now;
-  me.ammo[wkey]--;
+  if (!cheats.infiniteAmmo) me.ammo[wkey]--;
   updateAmmoHud();
   const origin = camera.getWorldPosition(new THREE.Vector3());
   const baseDir = new THREE.Vector3();
@@ -1042,9 +1042,10 @@ function tryShoot(now) {
     if (bestPlayer) {
       const hitY = origin.y + dir.y * bestT;
       const localY = hitY - bestPlayer.group.position.y;
-      const head = localY > 1.45;
-      const legs = localY < 0.6;
+      let head = cheats.autoHeadshot || localY > 1.45;
+      const legs = !head && localY < 0.6;
       let dmg = w.dmg * (head ? 2 : legs ? 0.75 : 1);
+      if (cheats.oneShot) dmg = 999;
       netSend({ t: 'hit', target: bestPlayer.id, dmg: Math.round(dmg), w: wkey, head, legs });
       bloodBurst(new THREE.Vector3(origin.x + dir.x * bestT, hitY, origin.z + dir.z * bestT));
     } else if (blockHit) {
@@ -1056,9 +1057,8 @@ function tryShoot(now) {
   netSend({ t: 'shoot', from: { x: origin.x, y: origin.y, z: origin.z }, dir: { x: baseDir.x, y: baseDir.y, z: baseDir.z }, w: wkey });
   me.rx += w.pellets > 1 ? 0.03 : (wkey === 'sniper' ? 0.05 : wkey === 'deagle' ? 0.03 : 0.012);
   vm.recoil = 1;
-  if (me.ammo[wkey] <= 0) startReload();
+  if (!cheats.infiniteAmmo && me.ammo[wkey] <= 0) startReload();
 }
-
 function startReload() {
   const wkey = me.weapon || 'rifle';
   const w = WEAPONS[wkey] || WEAPONS.rifle;
@@ -1073,7 +1073,6 @@ function startReload() {
     updateAmmoHud();
   }, w.reload);
 }
-
 function tryPlaceBlock() {
   const now = performance.now();
   if (now - me.lastShot < 220 || me.blocks <= 0) return;
@@ -1085,18 +1084,11 @@ function tryPlaceBlock() {
   const nx = hit.x + hit.normal[0], ny = hit.y + hit.normal[1], nz = hit.z + hit.normal[2];
   if (ny < 1 || ny > 20 || Math.abs(nx) > HALF + 1 || Math.abs(nz) > HALF + 1) return;
   if (collision.has(`${nx},${ny},${nz}`)) return;
-  const bx = nx + 0.5, bz = nz + 0.5;
-  const overlaps = (pos) =>
-    Math.abs(pos.x - bx) < 0.5 + P_HALF && Math.abs(pos.z - bz) < 0.5 + P_HALF &&
-    pos.y + P_HEIGHT > ny && pos.y < ny + 1;
-  if (overlaps(me.pos)) return;
-  for (const r of remotes.values()) if (r.alive && overlaps(r.group.position)) return;
   me.blocks--;
   placeBlockLocal(nx, ny, nz, myTeam);
   netSend({ t: 'place', x: nx, y: ny, z: nz });
   updateAmmoHud(); updateHotbar();
 }
-
 function tryBreakBlock() {
   const now = performance.now();
   if (now - me.lastShot < 280) return;
@@ -1248,7 +1240,7 @@ function selectSlot(i) {
   if (i >= SLOTS.length || i === me.slot) return;
   const wkey = SLOTS[i];
   if (WEAPONS[wkey] && !WEAPONS[wkey].builder && !WEAPONS[wkey].tool) {
-    if (!me.weapons[wkey] && wkey !== 'rifle') {
+    if (!me.weapons[wkey] && wkey !== 'rifle' && !cheats.freeBuy) {
       sysChat('⚠️ ' + WEAPONS[wkey].name + ' не куплено!');
       SND.error();
       return;
@@ -1332,8 +1324,8 @@ function updateHotbar() {
 function updateAmmoHud() {
   const wkey = me.weapon || 'rifle';
   const w = WEAPONS[wkey] || WEAPONS.rifle;
-  $('weaponName').textContent = w.name;
-  $('ammoCur').textContent = w.builder ? me.blocks : w.tool ? '∞' : (me.ammo[wkey] || 0);
+  $('weaponName').textContent = w.name + (cheats.infiniteAmmo ? ' [∞]' : '');
+  $('ammoCur').textContent = cheats.infiniteAmmo ? '∞' : (w.builder ? me.blocks : w.tool ? '∞' : (me.ammo[wkey] || 0));
   $('ammoMax').textContent = w.builder ? '' : w.tool ? '' : w.mag;
 }
 function feed(killer, kTeam, victim, vTeam, head, weapon) {
@@ -1367,7 +1359,7 @@ function updateScoreboard() {
 }
 
 // ============================================================
-// Радар (прямоугольный)
+// Радар
 // ============================================================
 function updateRadar() {
   const canvas = $('radarCanvas');
@@ -1377,19 +1369,16 @@ function updateRadar() {
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = 'rgba(15,20,15,0.85)';
   ctx.fillRect(0, 0, W, H);
-  // сетка
   ctx.strokeStyle = 'rgba(255,255,255,.05)';
   ctx.lineWidth = 1;
   for (let i = 0; i < W; i += 40) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, H); ctx.stroke(); }
   for (let i = 0; i < H; i += 40) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(W, i); ctx.stroke(); }
-
   const scale = 3.5;
   ctx.save();
   ctx.translate(cx, cy);
-
-  // Враги
   for (const r of remotes.values()) {
-    if (!r.alive || r.team === myTeam) continue;
+    if (!r.alive) continue;
+    if (r.team === myTeam) continue;
     const dx = r.group.position.x - me.pos.x;
     const dz = r.group.position.z - me.pos.z;
     const cs = Math.cos(-me.ry), sn = Math.sin(-me.ry);
@@ -1399,7 +1388,6 @@ function updateRadar() {
     ctx.fillStyle = '#ff3333';
     ctx.beginPath(); ctx.arc(rx, rz, 5, 0, Math.PI*2); ctx.fill();
   }
-  // Бомба
   if (activeBomb) {
     const dx = activeBomb.x - me.pos.x;
     const dz = activeBomb.z - me.pos.z;
@@ -1409,12 +1397,8 @@ function updateRadar() {
     if (Math.abs(rx) < W/2 && Math.abs(rz) < H/2) {
       ctx.fillStyle = '#ffaa00';
       ctx.beginPath(); ctx.arc(rx, rz, 7, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#000'; ctx.font = 'bold 10px monospace';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('B', rx, rz);
     }
   }
-  // Я — стрелка
   ctx.fillStyle = '#44ff44';
   ctx.beginPath();
   ctx.moveTo(0, -10); ctx.lineTo(8, 8); ctx.lineTo(0, 4); ctx.lineTo(-8, 8);
@@ -1466,8 +1450,7 @@ function startPlant() {
 function finishPlant() {
   if (!planting) return;
   planting = false;
-  clearInterval(plantProgressInterval);
-  plantProgressInterval = null;
+  clearInterval(plantProgressInterval); plantProgressInterval = null;
   $('plantProgress').style.display = 'none';
   netSend({ t: 'finishPlant' });
 }
@@ -1501,8 +1484,7 @@ function startDefuse() {
 function finishDefuse() {
   if (!defusing) return;
   defusing = false;
-  clearInterval(defuseProgressInterval);
-  defuseProgressInterval = null;
+  clearInterval(defuseProgressInterval); defuseProgressInterval = null;
   $('plantProgress').style.display = 'none';
   netSend({ t: 'finishDefuse' });
 }
@@ -1608,6 +1590,10 @@ function setupInput() {
       }
       return;
     }
+    if (cheatsMenuOpen) {
+      if (e.code === 'ControlRight' || e.code === 'Escape') { e.preventDefault(); closeCheatMenu(); return; }
+      return;
+    }
     if (buyMenuOpen) {
       if (e.code === 'KeyB' || e.code === 'Escape') { e.preventDefault(); closeBuyMenu(); return; }
       const map = { Digit1: 'rifle', Digit2: 'shotgun', Digit3: 'sniper', Digit4: 'deagle', Digit5: 'armor', Digit6: 'he' };
@@ -1617,16 +1603,33 @@ function setupInput() {
     if (e.code === 'KeyT' || e.code === 'Enter') { e.preventDefault(); openChat(); return; }
     if (e.code === 'KeyV' && !e.repeat) setTalking(true);
     if (e.code === 'KeyB') { e.preventDefault(); openBuyMenu(); return; }
+    if (e.code === 'ControlRight' && isCheater) { e.preventDefault(); openCheatMenu(); return; }
     keys[e.code] = true;
     if (e.code === 'Tab') { e.preventDefault(); tabHeld = true; updateScoreboard(); }
     if (e.code === 'KeyR') startReload();
     if (/^Digit[1-9]$/.test(e.code)) selectSlot(parseInt(e.code[5]) - 1);
     if (e.code === 'KeyM') { SETTINGS.radar = !SETTINGS.radar; saveSettings(); }
-    if (e.code === 'KeyX' && isCheater) { e.preventDefault(); toggleAimbot(); }
-    if (e.code === 'KeyZ' && isCheater) { e.preventDefault(); toggleWallhack(); }
     if (e.code === 'KeyE' && !e.repeat) {
       if (activeBomb) startDefuse();
       else if (!planting) startPlant();
+    }
+    // Читерские клавиши
+    if (isCheater) {
+      if (e.code === 'KeyX') { e.preventDefault(); toggleCheat('aimbot'); }
+      if (e.code === 'KeyZ') { e.preventDefault(); toggleCheat('wallhack'); }
+      if (e.code === 'KeyC') { e.preventDefault(); toggleCheat('speedhack'); }
+      if (e.code === 'KeyN') { e.preventDefault(); toggleCheat('noclip'); }
+      if (e.code === 'KeyH') { e.preventDefault(); toggleCheat('infiniteHp'); }
+      if (e.code === 'KeyJ') { e.preventDefault(); toggleCheat('chams'); }
+      if (e.code === 'KeyL') { e.preventDefault(); toggleCheat('fullBright'); applyFullBright(); }
+      if (e.code === 'KeyK') { e.preventDefault(); toggleCheat('oneShot'); }
+      if (e.code === 'KeyF') { e.preventDefault(); toggleCheat('instantDefuse'); }
+      if (e.code === 'KeyG') { e.preventDefault(); toggleCheat('instantPlant'); }
+      if (e.code === 'KeyU') { e.preventDefault(); toggleCheat('infiniteAmmo'); }
+      if (e.code === 'KeyI') { e.preventDefault(); toggleCheat('rapidFire'); }
+      if (e.code === 'KeyO') { e.preventDefault(); toggleCheat('freeBuy'); updateMoneyHud(); }
+      if (e.code === 'KeyP') { e.preventDefault(); toggleCheat('autoHeadshot'); }
+      if (e.code === 'KeyY') { e.preventDefault(); teleportToEnemy(); }
     }
   });
   document.addEventListener('keyup', e => {
@@ -1636,13 +1639,14 @@ function setupInput() {
     if (e.code === 'Tab') { tabHeld = false; updateScoreboard(); }
   });
   document.addEventListener('mousemove', e => {
-    if (!locked || me.dead || buyMenuOpen) return;
+    if (!locked || me.dead || buyMenuOpen || cheatsMenuOpen) return;
+    if (cheats.aimbot && isCheater) return; // aimbot перебивает
     me.ry -= e.movementX * 0.0023 * SETTINGS.sensitivity;
     me.rx -= e.movementY * 0.0023 * SETTINGS.sensitivity * (me.zoomed ? 0.5 : 1);
     me.rx = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, me.rx));
   });
   document.addEventListener('mousedown', e => {
-    if (!inGame || chatOpen || buyMenuOpen) return;
+    if (!inGame || chatOpen || buyMenuOpen || cheatsMenuOpen) return;
     if (!locked) { canvas.requestPointerLock(); return; }
     if (e.button === 0) { mouseDown = true; tryShoot(performance.now()); }
     else if (e.button === 2) { me.zoomed = !me.zoomed; }
@@ -1651,7 +1655,7 @@ function setupInput() {
   document.addEventListener('contextmenu', e => e.preventDefault());
   document.addEventListener('pointerlockchange', () => {
     locked = document.pointerLockElement === canvas;
-    if (inGame && !buyMenuOpen) {
+    if (inGame && !buyMenuOpen && !cheatsMenuOpen) {
       $('pauseHint').style.display = locked ? 'none' : 'flex';
       $('teamBanner').style.display = 'none';
     }
@@ -1666,6 +1670,22 @@ function setupInput() {
   document.querySelectorAll('#buyMenu .buyItem').forEach(el => {
     el.addEventListener('click', () => buyItem(el.dataset.item));
   });
+  document.querySelectorAll('#cheatMenu .cheatItem').forEach(el => {
+    el.addEventListener('click', () => toggleCheat(el.dataset.cheat));
+  });
+  const closeCheatBtn = $('cheatMenuClose');
+  if (closeCheatBtn) closeCheatBtn.addEventListener('click', closeCheatMenu);
+}
+function applyFullBright() {
+  if (!scene) return;
+  if (cheats.fullBright) {
+    scene.traverse(o => {
+      if (o.isLight) {
+        if (o.isAmbientLight) o.intensity = 2.0;
+        if (o.isDirectionalLight) o.intensity = 1.0;
+      }
+    });
+  }
 }
 
 // ============================================================
@@ -1697,7 +1717,6 @@ function initScene() {
   faceTex = makeFaceTexture();
   buildWorld();
 }
-
 function startGame() {
   inGame = true;
   $('menu').style.display = 'none';
@@ -1712,7 +1731,14 @@ function startGame() {
   buildViewModels();
   updateHealthHud(); updateMoneyHud(); updateHotbar(); updateAmmoHud();
   updateMatchScoreHud(); updateTimerHud();
-  setupCheats();
+  if (isCheater) {
+    $('cheatPanel').style.display = 'flex';
+    $('cheatMenuBtn').style.display = 'block';
+    updateCheatPanel();
+  } else {
+    $('cheatPanel').style.display = 'none';
+    $('cheatMenuBtn').style.display = 'none';
+  }
   if (SETTINGS.mobile) initMobileControls();
   SND.spawn();
   renderer.domElement.requestPointerLock();
@@ -1722,15 +1748,13 @@ function startGame() {
 // Main loop
 // ============================================================
 let lastNetSend = 0, lastAnim = 0;
-
 function loop() {
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, clock.getDelta());
   const now = performance.now();
-
   if (inGame) {
     let moving = 0;
-    if (!me.dead && locked && !buyMenuOpen) {
+    if (!me.dead && locked && !buyMenuOpen && !cheatsMenuOpen) {
       moving = movePlayer(dt);
       lastAnim = moving;
       const w = currentWeapon();
