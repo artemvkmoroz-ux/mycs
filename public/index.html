@@ -198,6 +198,188 @@
     color: #444; font-size: 10px; letter-spacing: 2px;
   }
 
+  /* ============ МОДАЛЬНОЕ ОКНО (ВЫБОР РЕЖИМА) ============ */
+  #playModal {
+    position: fixed; inset: 0; z-index: 130;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.85);
+    backdrop-filter: blur(8px);
+  }
+  #playModal.active { display: flex; }
+  #playModal .modalBox {
+    width: 900px; max-width: 95vw; max-height: 92vh; overflow-y: auto;
+    background: linear-gradient(180deg, rgba(15,15,20,.98) 0%, rgba(8,8,12,.98) 100%);
+    border: 1px solid rgba(240,173,78,.4);
+    border-radius: 8px; padding: 32px 40px;
+    box-shadow: 0 30px 80px rgba(0,0,0,.9);
+  }
+  #playModal .modalTitle {
+    font-size: 26px; font-weight: 900; letter-spacing: 5px;
+    color: #f0ad4e; text-align: center; margin-bottom: 6px;
+    text-transform: uppercase;
+    text-shadow: 0 0 30px rgba(240,173,78,.5);
+  }
+  #playModal .modalSub {
+    font-size: 11px; color: #666; text-align: center;
+    letter-spacing: 3px; margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  #playModal .sectionTitle {
+    font-size: 12px; font-weight: 700; letter-spacing: 3px;
+    color: #aaa; text-transform: uppercase; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  #playModal .sectionTitle::after {
+    content: ''; flex: 1; height: 1px;
+    background: rgba(255,255,255,.08);
+  }
+  #playModal .modeGrid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 12px; margin-bottom: 28px;
+  }
+  #playModal .modeCard {
+    background: rgba(255,255,255,.03);
+    border: 2px solid rgba(255,255,255,.1);
+    border-radius: 6px; padding: 20px 14px;
+    text-align: center; cursor: pointer;
+    transition: 0.15s; position: relative;
+  }
+  #playModal .modeCard:hover {
+    background: rgba(240,173,78,.1);
+    border-color: #f0ad4e;
+    transform: translateY(-3px);
+  }
+  #playModal .modeCard.active {
+    background: rgba(240,173,78,.15);
+    border-color: #f0ad4e;
+    box-shadow: 0 0 25px rgba(240,173,78,.4);
+  }
+  #playModal .modeCard .icon { font-size: 40px; margin-bottom: 10px; }
+  #playModal .modeCard .name {
+    font-size: 13px; color: #fff; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  #playModal .modeCard .desc {
+    font-size: 10px; color: #888; line-height: 1.5;
+  }
+  #playModal .modeCard .badge {
+    position: absolute; top: 8px; right: 10px;
+    background: #ff2222; color: #fff;
+    font-size: 9px; padding: 2px 6px; border-radius: 3px;
+    font-weight: 700; letter-spacing: 1px;
+  }
+  #playModal .lobbyRow {
+    display: flex; gap: 12px; margin-bottom: 28px;
+  }
+  #playModal .lobbyBtn {
+    flex: 1; padding: 16px 0;
+    font-size: 13px; font-weight: 700; letter-spacing: 3px;
+    text-transform: uppercase; cursor: pointer;
+    font-family: inherit; border-radius: 4px;
+    transition: 0.15s;
+    border: 1px solid rgba(255,255,255,.15);
+    color: #fff;
+    background: rgba(255,255,255,.05);
+  }
+  #playModal .lobbyBtn:hover {
+    background: rgba(240,173,78,.15);
+    border-color: #f0ad4e; color: #f0ad4e;
+  }
+  #playModal .lobbyBtn.primary {
+    background: linear-gradient(135deg, #f0ad4e 0%, #e8922c 100%);
+    color: #0a0a0c; border: none;
+  }
+  #playModal .lobbyBtn.primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(240,173,78,.5);
+  }
+  #playModal .lobbyCode {
+    display: flex; gap: 8px; margin-bottom: 28px;
+  }
+  #playModal .lobbyCode input {
+    flex: 1; padding: 14px 18px; font-size: 14px;
+    color: #fff; font-family: 'JetBrains Mono', monospace;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 4px; outline: none;
+    text-transform: uppercase; letter-spacing: 4px;
+    text-align: center;
+  }
+  #playModal .lobbyCode input:focus { border-color: #f0ad4e; }
+  #playModal .friendsSection {
+    background: rgba(255,255,255,.02);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 6px; padding: 16px;
+    margin-bottom: 28px;
+    max-height: 220px; overflow-y: auto;
+  }
+  #playModal .friendRow {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.05);
+  }
+  #playModal .friendRow:last-child { border-bottom: none; }
+  #playModal .friendInfo { display: flex; align-items: center; gap: 12px; }
+  #playModal .friendStatus {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+  #playModal .friendStatus.online { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+  #playModal .friendStatus.offline { background: #555; }
+  #playModal .friendName { font-size: 13px; color: #fff; font-weight: 600; }
+  #playModal .friendInvite {
+    padding: 6px 14px; font-size: 10px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    background: transparent; border: 1px solid rgba(240,173,78,.4);
+    color: #f0ad4e; border-radius: 3px; cursor: pointer;
+    font-family: inherit; transition: 0.15s;
+  }
+  #playModal .friendInvite:hover { background: #f0ad4e; color: #0a0a0c; }
+  #playModal .friendInvite:disabled { opacity: .3; cursor: not-allowed; }
+  #playModal .addFriendRow {
+    display: flex; gap: 8px; margin-bottom: 16px;
+  }
+  #playModal .addFriendRow input {
+    flex: 1; padding: 10px 14px; font-size: 12px;
+    color: #fff; font-family: inherit;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 4px; outline: none;
+  }
+  #playModal .addFriendRow input:focus { border-color: #f0ad4e; }
+  #playModal .addFriendRow button {
+    padding: 10px 20px; font-size: 11px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    background: linear-gradient(135deg, #f0ad4e 0%, #e8922c 100%);
+    color: #0a0a0c; border: none; border-radius: 4px;
+    cursor: pointer; font-family: inherit;
+  }
+  #playModal .modalActions {
+    display: flex; gap: 12px; margin-top: 8px;
+  }
+  #playModal .modalActions button {
+    flex: 1; padding: 16px 0;
+    font-size: 14px; font-weight: 900; letter-spacing: 4px;
+    text-transform: uppercase; cursor: pointer;
+    font-family: inherit; border-radius: 4px;
+    transition: 0.15s;
+  }
+  #playModal .btnCancel {
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.15);
+    color: #fff;
+  }
+  #playModal .btnCancel:hover { background: rgba(255,255,255,.1); }
+  #playModal .btnPlay {
+    background: linear-gradient(135deg, #f0ad4e 0%, #e8922c 100%);
+    color: #0a0a0c; border: none;
+    box-shadow: 0 8px 30px rgba(240,173,78,.5);
+  }
+  #playModal .btnPlay:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(240,173,78,.7);
+  }
+
   /* ============ НАСТРОЙКИ ============ */
   #settings {
     position: fixed; inset: 0; z-index: 110;
@@ -277,6 +459,43 @@
   .settingsBtns button:hover {
     background: rgba(240,173,78,.15);
     border-color: #f0ad4e; color: #f0ad4e;
+  }
+
+  /* ============ УВЕДОМЛЕНИЯ ============ */
+  #notifications {
+    position: fixed; top: 80px; right: 24px;
+    z-index: 300; display: flex; flex-direction: column; gap: 8px;
+    align-items: flex-end;
+  }
+  .notif {
+    background: linear-gradient(180deg, rgba(20,20,26,.98) 0%, rgba(10,10,14,.98) 100%);
+    border: 1px solid rgba(240,173,78,.4);
+    border-left: 3px solid #f0ad4e;
+    border-radius: 4px; padding: 12px 18px;
+    font-size: 13px; color: #fff;
+    min-width: 280px; max-width: 400px;
+    animation: notifSlide 0.3s ease-out;
+    box-shadow: 0 8px 25px rgba(0,0,0,.7);
+  }
+  .notif.success { border-left-color: #4ade80; border-color: rgba(74,222,128,.4); }
+  .notif.error { border-left-color: #ff5555; border-color: rgba(255,85,85,.4); }
+  .notif.info { border-left-color: #7f9fff; border-color: rgba(127,159,255,.4); }
+  .notif .notifTitle { font-weight: 700; font-size: 12px; letter-spacing: 1px; margin-bottom: 4px; }
+  .notif .notifText { font-size: 12px; color: #ccc; }
+  .notif .notifActions { display: flex; gap: 8px; margin-top: 10px; }
+  .notif .notifActions button {
+    padding: 6px 14px; font-size: 10px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    cursor: pointer; font-family: inherit;
+    background: transparent; border: 1px solid rgba(255,255,255,.2);
+    color: #fff; border-radius: 3px;
+    transition: 0.15s;
+  }
+  .notif .notifActions button.accept { background: #4ade80; color: #0a0a0c; border: none; }
+  .notif .notifActions button.decline { background: transparent; color: #ff5555; border-color: #ff5555; }
+  @keyframes notifSlide {
+    from { transform: translateX(40px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
   }
 
   /* ============ ИГРА ============ */
@@ -584,7 +803,6 @@
     display: none;
   }
 
-  /* ГРАНАТЫ HUD */
   #grenadeHud {
     position: fixed; bottom: 100px; left: 50%;
     transform: translateX(-50%);
@@ -608,14 +826,12 @@
   .grenadeSlot.flash { border-color: #ffee44; }
   .grenadeSlot.smoke { border-color: #66aaff; }
 
-  /* ВСПЫШКА */
   #flashOverlay {
     position: fixed; inset: 0; z-index: 100;
     background: #fff; opacity: 0; pointer-events: none;
     transition: opacity .15s;
   }
 
-  /* РЕЖИМ */
   #modeIndicator {
     position: fixed; top: 100px; left: 20px; z-index: 60;
     font-size: 11px; color: #f0ad4e; font-weight: 700;
@@ -625,7 +841,6 @@
     padding: 6px 12px; border-radius: 3px;
   }
 
-  /* ВЫБОР РЕЖИМА (moroz) */
   #modeSelect {
     position: fixed; top: 130px; left: 20px; z-index: 86;
     display: none; flex-direction: column; gap: 6px;
@@ -648,7 +863,6 @@
   #modeSelect button.active { background: #ff2222; border-color: #ff2222; }
   #modeSelect button:hover { background: #ff5555; border-color: #ff5555; }
 
-  /* ============ BUY MENU ============ */
   #buyMenu {
     position: fixed; inset: 0; z-index: 200;
     display: none; align-items: center; justify-content: center;
@@ -688,10 +902,9 @@
   #buyMenu .buyItem:hover {
     background: rgba(240,173,78,.1);
     border-color: #f0ad4e; transform: translateY(-3px);
-    box-shadow: 0 8px 20px rgba(240,173,78,.2);
   }
   #buyMenu .buyItem.disabled { opacity: .3; cursor: not-allowed; filter: grayscale(1); }
-  #buyMenu .buyItem.disabled:hover { transform: none; background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.1); box-shadow: none; }
+  #buyMenu .buyItem.disabled:hover { transform: none; background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.1); }
   #buyMenu .buyItem .icon { font-size: 40px; margin-bottom: 10px; }
   #buyMenu .buyItem .name { font-size: 13px; color: #fff; font-weight: 700; margin-bottom: 8px; letter-spacing: 1px; }
   #buyMenu .buyItem .price { font-size: 14px; color: #6ab04c; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
@@ -708,7 +921,6 @@
     margin-top: 24px; letter-spacing: 3px;
   }
 
-  /* ЧИТ-ПАНЕЛЬ */
   #cheatPanel {
     position: fixed; top: 260px; right: 24px; z-index: 85;
     display: none; flex-direction: column; gap: 6px;
@@ -800,7 +1012,6 @@
   }
   #cheatMenu .cheatCloseBtn:hover { background: #ff5555; }
 
-  /* МОБИЛЬНОЕ */
   #mobileControls { position: fixed; inset: 0; z-index: 75; display: none; pointer-events: none; }
   #mobileControls.active { display: block; }
   #joystickZone { position: absolute; bottom: 30px; left: 30px; width: 200px; height: 200px; pointer-events: auto; touch-action: none; }
@@ -864,6 +1075,8 @@
     #killfeed { top: 130px; }
     #buyMenu .buyGrid { grid-template-columns: repeat(2, 1fr); }
     #cheatMenu .cheatGrid { grid-template-columns: repeat(2, 1fr); }
+    #playModal .modeGrid { grid-template-columns: repeat(2, 1fr); }
+    #playModal .modalBox { padding: 24px 20px; }
     #grenadeHud { bottom: 120px; }
   }
 </style>
@@ -871,6 +1084,7 @@
 <body>
   <canvas id="game"></canvas>
 
+  <!-- ============ РЕГИСТРАЦИЯ ============ -->
   <div id="authScreen">
     <div class="authCard">
       <div class="logo">COUNTER-STRIKE 2</div>
@@ -882,6 +1096,7 @@
     </div>
   </div>
 
+  <!-- ============ ГЛАВНОЕ МЕНЮ ============ -->
   <div id="menu">
     <div class="cs-topnav">
       <div class="cs-nav-item active">ИГРАТЬ</div>
@@ -914,9 +1129,68 @@
       </div>
       <div id="menuErr"></div>
     </div>
-    <div class="ver">COUNTER-STRIKE 2 · Web Edition v4.0</div>
+    <div class="ver">COUNTER-STRIKE 2 · Web Edition v5.0</div>
   </div>
 
+  <!-- ============ МОДАЛЬНОЕ ОКНО ВЫБОРА РЕЖИМА ============ -->
+  <div id="playModal">
+    <div class="modalBox">
+      <div class="modalTitle">ВЫБОР РЕЖИМА</div>
+      <div class="modalSub">Настройка игры и лобби</div>
+
+      <div class="sectionTitle">🎮 РЕЖИМ</div>
+      <div class="modeGrid">
+        <div class="modeCard active" data-mode="classic">
+          <div class="icon">💣</div>
+          <div class="name">Classic</div>
+          <div class="desc">До 16 побед<br>Бомба и экономика</div>
+        </div>
+        <div class="modeCard" data-mode="arena">
+          <div class="icon">⚔️</div>
+          <div class="name">1v1 Arena</div>
+          <div class="desc">До 5 побед<br>Дуэль на арене</div>
+        </div>
+        <div class="modeCard" data-mode="deathmatch">
+          <div class="icon">💀</div>
+          <div class="name">Deathmatch</div>
+          <div class="desc">До 30 убийств<br>Все против всех</div>
+        </div>
+        <div class="modeCard" data-mode="gungame">
+          <div class="icon">🔫</div>
+          <div class="name">Gun Game</div>
+          <div class="desc">Новое оружие<br>за убийство</div>
+        </div>
+      </div>
+
+      <div class="sectionTitle">🚪 ЛОББИ</div>
+      <div class="lobbyRow">
+        <button class="lobbyBtn primary" id="createLobbyBtn">Создать лобби</button>
+        <button class="lobbyBtn" id="quickPlayBtn2">Быстрая игра</button>
+      </div>
+
+      <div class="sectionTitle">🔑 ВОЙТИ ПО КОДУ</div>
+      <div class="lobbyCode">
+        <input id="lobbyCodeInput" maxlength="6" placeholder="ВВЕДИ КОД">
+        <button class="lobbyBtn primary" id="joinLobbyBtn" style="flex:0 0 140px;">Войти</button>
+      </div>
+
+      <div class="sectionTitle">👥 ДРУЗЬЯ</div>
+      <div class="addFriendRow">
+        <input id="friendNameInput" maxlength="16" placeholder="Введи ник друга">
+        <button id="addFriendBtn">Добавить</button>
+      </div>
+      <div class="friendsSection" id="friendsList">
+        <div style="text-align:center; color:#666; font-size:12px; padding:20px;">Загрузка...</div>
+      </div>
+
+      <div class="modalActions">
+        <button class="btnCancel" id="modalCancel">Отмена</button>
+        <button class="btnPlay" id="modalPlay">Играть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ НАСТРОЙКИ ============ -->
   <div id="settings">
     <div class="settingsPanel">
       <div class="title">Настройки</div>
@@ -955,6 +1229,10 @@
     </div>
   </div>
 
+  <!-- ============ УВЕДОМЛЕНИЯ ============ -->
+  <div id="notifications"></div>
+
+  <!-- ============ БАННЕРЫ ============ -->
   <div id="teamBanner">
     <div class="big" id="teamBannerText"></div>
     <div class="small">Кликни, чтобы захватить мышь</div>
@@ -964,6 +1242,7 @@
     <div class="winSub" id="roundWinSub"></div>
   </div>
 
+  <!-- ============ HUD ============ -->
   <div id="hud">
     <div id="fpsCounter">FPS: 60</div>
 
@@ -1024,6 +1303,8 @@
       <div class="title">🎮 РЕЖИМ</div>
       <button data-mode="classic" class="active">CLASSIC</button>
       <button data-mode="arena">1v1 ARENA</button>
+      <button data-mode="deathmatch">DEATHMATCH</button>
+      <button data-mode="gungame">GUN GAME</button>
     </div>
 
     <div id="radar">
