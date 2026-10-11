@@ -19,25 +19,41 @@ function isMoroz(name) {
   return n === 'moroz' || n === 'мороз';
 }
 
-// ============ ЭКОНОМИКА ============
+// ============ ИГРОВЫЕ КОНСТАНТЫ ============
 const KILL_REWARD = 300;
 const ROUND_WIN_REWARD = 3250;
 const ROUND_LOSS_REWARD = 1400;
 const START_MONEY = 800;
 const MAX_MONEY = 16000;
-
 const PRICES = {
   rifle: 2700, shotgun: 1200, sniper: 4750, deagle: 700,
   armor: 1000, he: 300, flash: 200, smoke: 300,
 };
-
 const ROUND_TIME = 115000;
 const BUY_TIME = 15000;
 const MATCH_SCORE = 16;
+const ARENA_SCORE = 5;
+const DM_SCORE = 30;
 
 // ============ РЕЖИМЫ ============
-// 'classic' — обычный, 'arena' — 1v1
+const MODES = ['classic', 'arena', 'deathmatch', 'gungame'];
 let gameMode = 'classic';
+
+// ============ ДРУЗЬЯ ============
+// userId -> Set(friendId)
+const friends = new Map();
+// userId -> Set(pendingRequestFromId)
+const friendRequests = new Map();
+// userId -> name (для отображения)
+const userNames = new Map();
+// userId -> ws (для отправки приглашений)
+const userSockets = new Map();
+
+// ============ ЛОББИ ============
+// code -> { code, name, hostId, hostName, mode, players: Set(userId), maxPlayers }
+const lobbies = new Map();
+// userId -> code (в каком лобби находится)
+const userLobby = new Map();
 
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
@@ -72,9 +88,7 @@ let matchScore = { red: 0, blue: 0 };
 let buyPhase = true;
 let roundEnded = false;
 
-// ============ ГРАНАТЫ ============
-const grenades = []; // { x, y, z, type, throwTime, fuseTime, owner, team }
-
+const grenades = [];
 const GRENADE_TYPES = {
   he:    { fuse: 2000, radius: 5, damage: 100 },
   flash: { fuse: 1800, radius: 12, duration: 3000 },
@@ -85,7 +99,6 @@ const GRENADE_TYPES = {
 const SPAWN_Z = [-10, -5, 0, 5, 10];
 function spawnPoint(team) {
   if (gameMode === 'arena') {
-    // 1v1: две точки напротив друг друга
     return team === 'red' ? { x: -20, y: 1.05, z: 0 } : { x: 20, y: 1.05, z: 0 };
   }
   const x = team === 'red' ? -28 : 28;
@@ -94,6 +107,10 @@ function spawnPoint(team) {
 }
 
 function pickTeam() {
+  if (gameMode === 'deathmatch' || gameMode === 'gungame') {
+    // В DM/GunGame — все против всех, но команды для цвета
+    return Math.random() < 0.5 ? 'red' : 'blue';
+  }
   let red = 0, blue = 0;
   for (const p of players.values()) (p.team === 'red' ? red++ : blue++);
   if (players.size === 0) return 'red';
@@ -113,14 +130,62 @@ function broadcast(msg, exceptId) {
     if (p.id !== exceptId && p.ws.readyState === 1) p.ws.send(s);
   }
 }
+function sendToUser(userId, msg) {
+  const ws = userSockets.get(userId);
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
+}
 
 function publicInfo(p) {
   return {
     id: p.id, name: p.name, team: p.team, hp: p.hp, armor: p.armor,
     alive: p.alive, kills: p.kills, deaths: p.deaths,
     pos: p.pos, ry: p.ry, rx: p.rx, money: p.money, weapon: p.weapon,
-    flashing: p.flashing || 0,
   };
+}
+
+// ============ ЛОББИ ============
+function generateLobbyCode() {
+  let code;
+  do {
+    code = Math.random().toString(36).substring(2, 8).toUpperCase();
+  } while (lobbies.has(code));
+  return code;
+}
+
+function broadcastLobbyList() {
+  const list = [];
+  for (const [code, lobby] of lobbies) {
+    list.push({
+      code,
+      name: lobby.name,
+      hostName: lobby.hostName,
+      mode: lobby.mode,
+      players: lobby.players.size,
+      maxPlayers: lobby.maxPlayers,
+    });
+  }
+  for (const userId of userSockets.keys()) {
+    sendToUser(userId, { t: 'lobbyList', lobbies: list });
+  }
+}
+
+function broadcastFriendLists() {
+  for (const userId of userSockets.keys()) {
+    const userFriends = friends.get(userId) || new Set();
+    const list = [];
+    for (const fid of userFriends) {
+      const fname = userNames.get(fid) || 'Неизвестно';
+      const online = userSockets.has(fid);
+      const inLobby = userLobby.has(fid);
+      list.push({ id: fid, name: fname, online, inLobby });
+    }
+    const reqs = friendRequests.get(userId) || new Set();
+    const reqList = [];
+    for (const rid of reqs) {
+      reqList.push({ id: rid, name: userNames.get(rid) || 'Неизвестно' });
+    }
+    sendToUser(userId, { t: 'friendList', friends: list, requests: reqList });
+  }
 }
 
 // ============ РАУНД ============
@@ -134,7 +199,7 @@ function startRound() {
   grenades.length = 0;
 
   for (const p of players.values()) {
-    p.hp = 100;
+    p.hp = gameMode === 'deathmatch' || gameMode === 'gungame' ? 100 : 100;
     p.armor = 0;
     p.alive = true;
     p.pos = spawnPoint(p.team);
@@ -142,9 +207,13 @@ function startRound() {
     p.defusing = null;
     p.flashing = 0;
     if (gameMode === 'arena') {
-      // В арене бесплатно даём AK
       p.weapons = { rifle: true, shotgun: false, sniper: false, deagle: false };
       p.weapon = 'rifle';
+      p.money = 0;
+    } else if (gameMode === 'gungame') {
+      p.weapons = { rifle: false, shotgun: false, sniper: false, deagle: true };
+      p.weapon = 'deagle';
+      p.gunLevel = 0;
       p.money = 0;
     } else {
       p.weapons = { rifle: false, shotgun: false, sniper: false, deagle: false };
@@ -173,7 +242,7 @@ function endRound(winnerTeam, reason) {
   }
   broadcast({ t: 'roundEnd', winner: winnerTeam, reason, matchScore });
 
-  const scoreTarget = gameMode === 'arena' ? 5 : MATCH_SCORE;
+  const scoreTarget = gameMode === 'arena' ? ARENA_SCORE : (gameMode === 'deathmatch' || gameMode === 'gungame' ? DM_SCORE : MATCH_SCORE);
   if (matchScore.red >= scoreTarget || matchScore.blue >= scoreTarget) {
     const champ = matchScore.red >= scoreTarget ? 'red' : 'blue';
     broadcast({ t: 'matchEnd', winner: champ, matchScore });
@@ -189,13 +258,11 @@ function endRound(winnerTeam, reason) {
   setTimeout(() => { if (players.size > 0) startRound(); }, 5000);
 }
 
-// ============ ВЗРЫВ БОМБЫ ============
 function startBombTimer() {
   if (!activeBomb) return;
   setTimeout(() => {
     if (!activeBomb) return;
     broadcast({ t: 'bombExploded', bomb: activeBomb });
-    console.log('💥 БОМБА ВЗОРВАЛАСЬ!');
     for (const p of players.values()) {
       if (!p.alive) continue;
       const dx = p.pos.x - activeBomb.x;
@@ -211,7 +278,6 @@ function startBombTimer() {
   }, BOMB_FUSE);
 }
 
-// ============ УРОН ============
 function applyDamage(target, dmg, attackerId, isHead) {
   if (!target.alive) return;
   let finalDmg = dmg;
@@ -228,14 +294,46 @@ function applyDamage(target, dmg, attackerId, isHead) {
       killer.kills++;
       killer.money = Math.min(MAX_MONEY, killer.money + KILL_REWARD);
       send(killer, { t: 'moneyUpdate', money: killer.money });
+      // GunGame — новое оружие
+      if (gameMode === 'gungame') {
+        const order = ['deagle', 'shotgun', 'rifle', 'sniper', 'pickaxe'];
+        killer.gunLevel = (killer.gunLevel || 0) + 1;
+        if (killer.gunLevel >= order.length) {
+          // Победа в GunGame
+          broadcast({ t: 'matchEnd', winner: killer.team, matchScore });
+          return;
+        }
+        const nextWeapon = order[killer.gunLevel];
+        killer.weapons[nextWeapon] = true;
+        killer.weapon = nextWeapon;
+        send(killer, { t: 'weaponSwitched', weapon: nextWeapon });
+      }
     }
     broadcast({ t: 'death', victim: target.id, killer: attackerId, head: !!isHead });
 
-    const aliveRed = [...players.values()].filter(p => p.alive && p.team === 'red').length;
-    const aliveBlue = [...players.values()].filter(p => p.alive && p.team === 'blue').length;
-    if (players.size >= 2) {
-      if (aliveRed === 0 && aliveBlue > 0) setTimeout(() => endRound('blue', 'elimination'), 500);
-      else if (aliveBlue === 0 && aliveRed > 0) setTimeout(() => endRound('red', 'elimination'), 500);
+    // Deathmatch/GunGame — мгновенный респавн
+    if (gameMode === 'deathmatch' || gameMode === 'gungame') {
+      setTimeout(() => {
+        const p = players.get(target.id);
+        if (!p) return;
+        p.hp = 100;
+        p.armor = 0;
+        p.alive = true;
+        p.pos = spawnPoint(p.team);
+        if (gameMode === 'gungame') {
+          p.weapon = 'deagle';
+          p.weapons = { rifle: false, shotgun: false, sniper: false, deagle: true };
+          p.gunLevel = 0;
+        }
+        broadcast({ t: 'respawn', id: p.id, pos: p.pos, hp: 100, armor: 0 });
+      }, 2000);
+    } else {
+      const aliveRed = [...players.values()].filter(p => p.alive && p.team === 'red').length;
+      const aliveBlue = [...players.values()].filter(p => p.alive && p.team === 'blue').length;
+      if (players.size >= 2) {
+        if (aliveRed === 0 && aliveBlue > 0) setTimeout(() => endRound('blue', 'elimination'), 500);
+        else if (aliveBlue === 0 && aliveRed > 0) setTimeout(() => endRound('red', 'elimination'), 500);
+      }
     }
   } else {
     send(target, { t: 'hp', hp: target.hp, armor: target.armor, from: attackerId });
@@ -249,10 +347,8 @@ function updateGrenades() {
     const g = grenades[i];
     if (now < g.explodeAt) continue;
 
-    // Взрыв
     const cfg = GRENADE_TYPES[g.type];
     if (g.type === 'he') {
-      // Урон
       for (const p of players.values()) {
         if (!p.alive) continue;
         const dx = p.pos.x - g.x;
@@ -261,17 +357,11 @@ function updateGrenades() {
         const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
         if (dist < cfg.radius) {
           const dmg = Math.max(0, Math.round(cfg.damage * (1 - dist/cfg.radius)));
-          if (p.team === g.team && p.id !== g.owner) {
-            // Тимкилл
-            applyDamage(p, dmg, g.owner, false);
-          } else {
-            applyDamage(p, dmg, g.owner, false);
-          }
+          applyDamage(p, dmg, g.owner, false);
         }
       }
       broadcast({ t: 'grenadeExplode', x: g.x, y: g.y, z: g.z, type: 'he' });
     } else if (g.type === 'flash') {
-      // Ослепление
       for (const p of players.values()) {
         if (!p.alive) continue;
         const dx = p.pos.x - g.x;
@@ -279,7 +369,6 @@ function updateGrenades() {
         const dz = p.pos.z - g.z;
         const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
         if (dist < cfg.radius) {
-          // Проверка на взгляд в сторону вспышки
           const toFlash = Math.atan2(-(g.x - p.pos.x), -(g.z - p.pos.z));
           let angleDiff = Math.abs(p.ry - toFlash);
           angleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
@@ -293,7 +382,6 @@ function updateGrenades() {
       broadcast({ t: 'grenadeExplode', x: g.x, y: g.y, z: g.z, type: 'flash' });
     } else if (g.type === 'smoke') {
       broadcast({ t: 'smokeStart', x: g.x, y: g.y, z: g.z, duration: cfg.duration });
-      // Дым живёт cfg.duration
       setTimeout(() => {
         broadcast({ t: 'smokeEnd', x: g.x, y: g.y, z: g.z });
       }, cfg.duration);
@@ -303,11 +391,11 @@ function updateGrenades() {
 }
 setInterval(updateGrenades, 100);
 
-// ============ СТАРТ ============
 setTimeout(() => { if (players.size > 0) startRound(); }, 1500);
 
 wss.on('connection', (ws) => {
   let me = null;
+  let myUserId = null;
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
 
@@ -315,6 +403,7 @@ wss.on('connection', (ws) => {
     let msg;
     try { msg = JSON.parse(data); } catch { return; }
 
+    // ============ JOIN ============
     if (msg.t === 'join' && !me) {
       const rawName = String(msg.name || 'Игрок').replace(/[<>&"]/g, '').trim().slice(0, 16) || 'Игрок';
       const pass = String(msg.password || '').trim();
@@ -328,8 +417,14 @@ wss.on('connection', (ws) => {
 
       const team = pickTeam();
       const pos = spawnPoint(team);
+      myUserId = 'user_' + nextId; // Уникальный ID для системы друзей
+      userNames.set(myUserId, rawName);
+      userSockets.set(myUserId, ws);
+      friends.set(myUserId, new Set());
+      friendRequests.set(myUserId, new Set());
+
       me = {
-        id: nextId++, ws, name: rawName, team,
+        id: nextId++, userId: myUserId, ws, name: rawName, team,
         hp: 100, armor: 0, alive: true, kills: 0, deaths: 0,
         money: START_MONEY,
         pos, ry: team === 'red' ? -Math.PI / 2 : Math.PI / 2, rx: 0,
@@ -337,24 +432,159 @@ wss.on('connection', (ws) => {
         planting: null, defusing: null,
         weapon: 'rifle',
         weapons: { rifle: false, shotgun: false, sniper: false, deagle: false },
-        grenades: { he: 1, flash: 1, smoke: 1 }, // стартовые
+        grenades: { he: 1, flash: 1, smoke: 1 },
         flashing: 0,
         cheater: isMorozPlayer,
+        gunLevel: 0,
       };
       players.set(me.id, me);
       send(me, {
-        t: 'welcome', id: me.id, team, pos, ry: me.ry,
+        t: 'welcome', id: me.id, userId: myUserId, team, pos, ry: me.ry,
         players: [...players.values()].filter(p => p.id !== me.id).map(publicInfo),
         placed, destroyed, matchScore, money: me.money, armor: me.armor,
         cheater: isMorozPlayer, roundActive, buyPhase, gameMode,
+        mods: MODES,
       });
       broadcast({ t: 'join', p: publicInfo(me) }, me.id);
-      console.log(`+ ${me.name} joined team ${team}${isMorozPlayer ? ' [MOROZ]' : ''} (${players.size} online)`);
+      console.log(`+ ${rawName} joined team ${team}${isMorozPlayer ? ' [MOROZ]' : ''} (${players.size} online)`);
+
+      // Отправляем списки друзей и лобби
+      broadcastFriendLists();
+      broadcastLobbyList();
+
       if (!roundActive && players.size >= 1) startRound();
       return;
     }
     if (!me) return;
 
+    // ============ ДРУЗЬЯ ============
+    if (msg.t === 'addFriend') {
+      const targetName = String(msg.name || '').trim();
+      // Ищем userId по имени
+      let targetId = null;
+      for (const [uid, uname] of userNames) {
+        if (uname.toLowerCase() === targetName.toLowerCase()) { targetId = uid; break; }
+      }
+      if (!targetId) { send(me, { t: 'friendError', text: 'Игрок не найден' }); return; }
+      if (targetId === me.userId) { send(me, { t: 'friendError', text: 'Нельзя добавить себя' }); return; }
+      if ((friends.get(me.userId) || new Set()).has(targetId)) { send(me, { t: 'friendError', text: 'Уже в друзьях' }); return; }
+      friendRequests.get(targetId).add(me.userId);
+      sendToUser(targetId, { t: 'friendRequest', from: me.userId, name: me.name });
+      send(me, { t: 'friendAdded', text: 'Запрос отправлен' });
+      broadcastFriendLists();
+      return;
+    }
+
+    if (msg.t === 'acceptFriend') {
+      const fromId = msg.from;
+      const reqs = friendRequests.get(me.userId);
+      if (!reqs || !reqs.has(fromId)) return;
+      reqs.delete(fromId);
+      friends.get(me.userId).add(fromId);
+      friends.get(fromId).add(me.userId);
+      send(me, { t: 'friendAdded', text: 'Друг добавлен!' });
+      sendToUser(fromId, { t: 'friendAdded', text: me.name + ' принял заявку' });
+      broadcastFriendLists();
+      return;
+    }
+
+    if (msg.t === 'declineFriend') {
+      const fromId = msg.from;
+      friendRequests.get(me.userId)?.delete(fromId);
+      broadcastFriendLists();
+      return;
+    }
+
+    if (msg.t === 'removeFriend') {
+      const fid = msg.id;
+      friends.get(me.userId)?.delete(fid);
+      friends.get(fid)?.delete(me.userId);
+      broadcastFriendLists();
+      return;
+    }
+
+    if (msg.t === 'inviteFriend') {
+      const fid = msg.id;
+      if (!userSockets.has(fid)) { send(me, { t: 'friendError', text: 'Друг офлайн' }); return; }
+      const code = userLobby.get(me.userId);
+      if (!code) { send(me, { t: 'friendError', text: 'Сначала создай лобби' }); return; }
+      sendToUser(fid, { t: 'lobbyInvite', code, fromName: me.name, mode: lobbies.get(code)?.mode });
+      send(me, { t: 'friendAdded', text: 'Приглашение отправлено' });
+      return;
+    }
+
+    // ============ ЛОББИ ============
+    if (msg.t === 'createLobby') {
+      const name = String(msg.name || 'Комната').slice(0, 20);
+      const mode = MODES.includes(msg.mode) ? msg.mode : 'classic';
+      const code = generateLobbyCode();
+      lobbies.set(code, {
+        code, name,
+        hostId: me.userId,
+        hostName: me.name,
+        mode,
+        players: new Set([me.userId]),
+        maxPlayers: 10,
+      });
+      userLobby.set(me.userId, code);
+      send(me, { t: 'lobbyJoined', code, name, mode, isHost: true });
+      broadcastLobbyList();
+      return;
+    }
+
+    if (msg.t === 'joinLobby') {
+      const code = String(msg.code || '').toUpperCase();
+      const lobby = lobbies.get(code);
+      if (!lobby) { send(me, { t: 'lobbyError', text: 'Комната не найдена' }); return; }
+      if (lobby.players.size >= lobby.maxPlayers) { send(me, { t: 'lobbyError', text: 'Комната полна' }); return; }
+      lobby.players.add(me.userId);
+      userLobby.set(me.userId, code);
+      send(me, { t: 'lobbyJoined', code, name: lobby.name, mode: lobby.mode, isHost: false });
+      // Обновляем список игроков в лобби
+      const names = [...lobby.players].map(id => userNames.get(id) || '?');
+      sendToUser(lobby.hostId, { t: 'lobbyPlayers', players: names });
+      broadcastLobbyList();
+      return;
+    }
+
+    if (msg.t === 'leaveLobby') {
+      const code = userLobby.get(me.userId);
+      if (!code) return;
+      const lobby = lobbies.get(code);
+      if (lobby) {
+        lobby.players.delete(me.userId);
+        if (lobby.players.size === 0) lobbies.delete(code);
+        else if (lobby.hostId === me.userId) {
+          // Передать хоста
+          const newHost = [...lobby.players][0];
+          lobby.hostId = newHost;
+          lobby.hostName = userNames.get(newHost) || '?';
+        }
+      }
+      userLobby.delete(me.userId);
+      send(me, { t: 'lobbyLeft' });
+      broadcastLobbyList();
+      return;
+    }
+
+    if (msg.t === 'setLobbyMode') {
+      const code = userLobby.get(me.userId);
+      if (!code) return;
+      const lobby = lobbies.get(code);
+      if (!lobby || lobby.hostId !== me.userId) return;
+      if (MODES.includes(msg.mode)) {
+        lobby.mode = msg.mode;
+        gameMode = msg.mode;
+        matchScore = { red: 0, blue: 0 };
+        broadcast({ t: 'modeChanged', mode: gameMode });
+        sendToUser(me.userId, { t: 'lobbyModeChanged', mode: gameMode });
+        broadcastLobbyList();
+        setTimeout(() => startRound(), 1000);
+      }
+      return;
+    }
+
+    // ============ ИГРА ============
     switch (msg.t) {
       case 'state': {
         if (!me.alive) break;
@@ -369,7 +599,6 @@ wss.on('connection', (ws) => {
           }
         }
         me.pos = msg.pos; me.ry = msg.ry; me.rx = msg.rx; me.anim = msg.anim;
-        // Обновляем ослепление
         if (me.flashing > 0) me.flashing = Math.max(0, me.flashing - 50);
         break;
       }
@@ -379,7 +608,7 @@ wss.on('connection', (ws) => {
       case 'hit': {
         const target = players.get(msg.target);
         if (!target || !target.alive || !me.alive) break;
-        if (target.team === me.team && !me.cheater) break;
+        if (target.team === me.team && !me.cheater && gameMode === 'classic') break;
         const dx = target.pos.x - me.pos.x;
         const dz = target.pos.z - me.pos.z;
         if (dx*dx + dz*dz > 200*200) break;
@@ -399,60 +628,29 @@ wss.on('connection', (ws) => {
         broadcast({ t: 'chat', id: me.id, name: me.name, team: me.team, text });
         break;
       }
-      case 'place': {
-        const { x, y, z } = msg;
-        if (![x, y, z].every(Number.isInteger)) break;
-        if (Math.abs(x) > 40 || Math.abs(z) > 40 || y < 1 || y > 20) break;
-        if (placed.length > 4000) break;
-        placed.push({ x, y, z, team: me.team });
-        broadcast({ t: 'place', x, y, z, team: me.team });
-        break;
-      }
-      case 'destroy': {
-        const { x, y, z } = msg;
-        if (![x, y, z].every(Number.isInteger)) break;
-        if (x < -32 || x > 31 || z < -32 || z > 31 || y < 1 || y > 20) break;
-        const key = `${x},${y},${z}`;
-        if (destroyedSet.has(key)) break;
-        const pi = placed.findIndex(b => b.x === x && b.y === y && b.z === z);
-        if (pi >= 0) placed.splice(pi, 1);
-        else { if (destroyed.length > 8000) break; destroyedSet.add(key); destroyed.push({ x, y, z }); }
-        broadcast({ t: 'destroy', x, y, z });
-        break;
-      }
-      case 'rtc': {
-        const target = players.get(msg.to | 0);
-        if (!target || target.id === me.id || !msg.data) break;
-        send(target, { t: 'rtc', from: me.id, data: msg.data });
-        break;
-      }
-
-      // ============ ПОКУПКА ============
       case 'buy': {
-        if (!buyPhase) { send(me, { t: 'buyError', text: 'Закупка только в начале раунда!' }); break; }
+        if (!buyPhase && !me.cheater) { send(me, { t: 'buyError', text: 'Закупка только в начале раунда!' }); break; }
         const item = msg.item;
         const price = PRICES[item];
         if (!price) { send(me, { t: 'buyError', text: 'Неизвестный предмет' }); break; }
-        if (me.money < price) { send(me, { t: 'buyError', text: 'Недостаточно денег!' }); break; }
+        if (me.money < price && !me.cheater) { send(me, { t: 'buyError', text: 'Недостаточно денег!' }); break; }
         if (item === 'he' || item === 'flash' || item === 'smoke') {
           if (me.grenades[item] >= 1) { send(me, { t: 'buyError', text: 'Граната уже куплена' }); break; }
-          me.money -= price;
+          if (!me.cheater) me.money -= price;
           me.grenades[item] = 1;
         } else if (item === 'armor') {
           if (me.armor > 0) { send(me, { t: 'buyError', text: 'Броня уже куплена' }); break; }
-          me.money -= price;
+          if (!me.cheater) me.money -= price;
           me.armor = 100;
         } else {
           if (me.weapons[item]) { send(me, { t: 'buyError', text: 'Уже куплено' }); break; }
-          me.money -= price;
+          if (!me.cheater) me.money -= price;
           me.weapons[item] = true;
           me.weapon = item;
         }
         send(me, { t: 'bought', item, money: me.money, armor: me.armor, weapons: me.weapons, grenades: me.grenades });
         break;
       }
-
-      // ============ ГРАНАТЫ — БРОСОК ============
       case 'throwGrenade': {
         if (!me.alive) break;
         const type = msg.type;
@@ -469,21 +667,18 @@ wss.on('connection', (ws) => {
         broadcast({ t: 'grenadeThrown', id: me.id, type, from: { x: g.x, y: g.y, z: g.z }, vel: { x: g.vx, y: g.vy, z: g.vz } }, me.id);
         break;
       }
-
-      // ============ СМЕНА РЕЖИМА ============
       case 'setMode': {
-        if (!me.cheater) break; // Только moroz
-        gameMode = msg.mode === 'arena' ? 'arena' : 'classic';
-        matchScore = { red: 0, blue: 0 };
-        broadcast({ t: 'modeChanged', mode: gameMode });
-        console.log(`🎮 Режим: ${gameMode}`);
-        setTimeout(() => startRound(), 1000);
+        if (!me.cheater) break;
+        if (MODES.includes(msg.mode)) {
+          gameMode = msg.mode;
+          matchScore = { red: 0, blue: 0 };
+          broadcast({ t: 'modeChanged', mode: gameMode });
+          setTimeout(() => startRound(), 1000);
+        }
         break;
       }
-
-      // ============ БОМБА ============
       case 'startPlant': {
-        if (!me.alive || !roundActive) break;
+        if (!me.alive || !roundActive || gameMode !== 'classic') break;
         if (me.team !== 'red') { send(me, { t: 'bombError', text: 'Бомбу закладывают только КРАСНЫЕ!' }); break; }
         if (activeBomb) { send(me, { t: 'bombError', text: 'Бомба уже заложена!' }); break; }
         if (me.planting) break;
@@ -502,7 +697,7 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'startDefuse': {
-        if (!me.alive || !activeBomb || me.team !== 'blue') break;
+        if (!me.alive || !activeBomb || me.team !== 'blue' || gameMode !== 'classic') break;
         const dx = me.pos.x - activeBomb.x;
         const dz = me.pos.z - activeBomb.z;
         if (Math.sqrt(dx*dx + dz*dz) > BOMB_RADIUS) { send(me, { t: 'bombError', text: 'Слишком далеко!' }); break; }
@@ -527,8 +722,32 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     if (!me) return;
     if (me.respawnTimer) clearTimeout(me.respawnTimer);
+    // Убираем из лобби
+    const code = userLobby.get(me.userId);
+    if (code) {
+      const lobby = lobbies.get(code);
+      if (lobby) {
+        lobby.players.delete(me.userId);
+        if (lobby.players.size === 0) lobbies.delete(code);
+        else if (lobby.hostId === me.userId) {
+          const newHost = [...lobby.players][0];
+          lobby.hostId = newHost;
+          lobby.hostName = userNames.get(newHost) || '?';
+        }
+      }
+      userLobby.delete(me.userId);
+    }
+    userSockets.delete(me.userId);
+    userNames.delete(me.userId);
+    friends.delete(me.userId);
+    friendRequests.delete(me.userId);
+    // Убираем из друзей у других
+    for (const fset of friends.values()) fset.delete(me.userId);
+
     players.delete(me.id);
     broadcast({ t: 'leave', id: me.id });
+    broadcastFriendLists();
+    broadcastLobbyList();
     console.log(`- ${me.name} left (${players.size} online)`);
     if (players.size === 0) { roundActive = false; activeBomb = null; }
   });
