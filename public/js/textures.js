@@ -3,7 +3,6 @@
 // ============================================================
 import * as THREE from 'three';
 
-// ---------- Seeded RNG (одинаковые текстуры у всех) ----------
 function rng(seed) {
   let s = seed >>> 0;
   return () => {
@@ -49,7 +48,6 @@ const STONE = ['#7f7f7f', '#747474', '#8a8a8a', '#6f6f6f'];
 const GRASS = ['#5d9c3a', '#549135', '#67a83f', '#4f8a31'];
 const DIRT = ['#79553a', '#6e4c33', '#82603f', '#65462f'];
 
-// ---------- buildTextures ----------
 export function buildTextures() {
   const tex = {};
 
@@ -96,7 +94,6 @@ export function buildTextures() {
   return tex;
 }
 
-// ---------- Материалы ----------
 function mat(t) { return new THREE.MeshLambertMaterial({ map: t }); }
 
 export function buildMaterials(tex) {
