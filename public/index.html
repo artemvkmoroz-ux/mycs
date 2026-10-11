@@ -3,135 +3,164 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>БЛОКАДА — Minecraft Shooter</title>
+<title>БЛОКАДА — Tactical Shooter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
-  body, button, input { font-family: 'Press Start 2P', monospace; }
-  canvas#game { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0c; }
+  body { font-family: 'Inter', -apple-system, sans-serif; color: #e8e8e8; }
+  canvas#game { display: block; width: 100%; height: 100%; }
 
   /* ============ ЭКРАН РЕГИСТРАЦИИ ============ */
   #authScreen {
     position: fixed; inset: 0; z-index: 120;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background: #1a1410;
-    background-image: radial-gradient(circle at 50% 50%, #2a1f15 0%, #0a0604 100%);
+    background: radial-gradient(ellipse at center, #1a1410 0%, #0a0a0c 100%);
   }
-  #authScreen .logo { font-size: 48px; color: #fff; letter-spacing: 4px; text-shadow: 5px 5px 0 #3f3f3f; margin-bottom: 8px; }
-  #authScreen .sub { color: #ccc; font-size: 10px; margin-bottom: 40px; text-shadow: 2px 2px 0 #222; }
+  #authScreen::before {
+    content: ''; position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px);
+    background-size: 60px 60px; pointer-events: none;
+  }
+  #authScreen .logo { font-size: 56px; font-weight: 900; letter-spacing: 8px; color: #fff; margin-bottom: 8px; position: relative; }
+  #authScreen .logo span { color: #f0ad4e; }
+  #authScreen .sub { color: #888; font-size: 12px; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 50px; position: relative; }
   .auth-input {
-    width: 360px; padding: 14px; font-size: 13px; color: #fff; text-align: center;
-    background: #000; border: 2px solid #a0a0a0; outline: none; margin-bottom: 14px;
+    width: 360px; padding: 16px 20px; font-size: 14px; color: #fff; text-align: center;
+    font-family: inherit; background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.1); border-radius: 4px;
+    outline: none; margin-bottom: 12px; transition: 0.2s; position: relative;
   }
-  .auth-input:focus { border-color: #fff; }
+  .auth-input:focus { border-color: #f0ad4e; background: rgba(240,173,78,.05); box-shadow: 0 0 20px rgba(240,173,78,.15); }
+  .auth-input::placeholder { color: #666; }
   .auth-btn {
-    width: 360px; padding: 15px 0; font-size: 13px; color: #fff; cursor: pointer;
-    background: #6f6f6f; border: 2px solid; border-color: #aaa #565656 #565656 #aaa;
-    box-shadow: inset 0 -4px 0 rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.25), 0 0 0 2px #000;
-    text-shadow: 2px 2px 0 #3f3f3f;
+    width: 360px; padding: 16px 0; font-size: 14px; font-weight: 700;
+    letter-spacing: 3px; text-transform: uppercase; color: #0a0a0c;
+    cursor: pointer; font-family: inherit; border: none; border-radius: 4px;
+    background: linear-gradient(135deg, #f0ad4e 0%, #e8922c 100%);
+    transition: 0.2s; box-shadow: 0 4px 20px rgba(240,173,78,.3);
+    position: relative;
   }
-  .auth-btn:hover { background: #7f8cff; border-color: #c3caff #4a55b0 #4a55b0 #c3caff; }
-  .auth-btn:active { transform: translateY(2px); }
-  #authErr { color: #ff5555; font-size: 10px; margin-top: 14px; min-height: 14px; text-shadow: 1px 1px 0 #400; max-width: 360px; text-align: center; line-height: 1.6; }
+  .auth-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 30px rgba(240,173,78,.5); }
+  .auth-btn:active { transform: translateY(0); }
+  .auth-btn:disabled { opacity: .5; cursor: default; transform: none; }
+  #authErr { color: #ff5555; font-size: 12px; margin-top: 16px; min-height: 16px; max-width: 360px; text-align: center; line-height: 1.6; position: relative; }
 
   /* ============ ГЛАВНОЕ МЕНЮ ============ */
   #menu {
     position: fixed; inset: 0; z-index: 100;
     display: none; flex-direction: column; align-items: center; justify-content: center;
-    background-repeat: repeat; background-size: 64px 64px;
-    image-rendering: pixelated;
+    background: radial-gradient(ellipse at center, #1a1410 0%, #0a0a0c 100%);
   }
-  #menu .logo { font-size: 52px; color: #fff; letter-spacing: 4px; text-shadow: 5px 5px 0 #3f3f3f; margin-bottom: 8px; }
-  #menu .splash { color: #ffff55; font-size: 11px; transform: rotate(-12deg) translateX(150px) translateY(-26px); text-shadow: 2px 2px 0 #3f3f00; animation: pulse 0.5s infinite alternate; }
-  @keyframes pulse { from { transform: rotate(-12deg) translateX(150px) translateY(-26px) scale(1);} to { transform: rotate(-12deg) translateX(150px) translateY(-26px) scale(1.08);} }
-  #menu .sub { color: #ccc; font-size: 10px; margin-bottom: 20px; text-shadow: 2px 2px 0 #222; }
-
+  #menu::before {
+    content: ''; position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px);
+    background-size: 60px 60px; pointer-events: none;
+  }
+  #menu .logo { font-size: 64px; font-weight: 900; letter-spacing: 10px; color: #fff; margin-bottom: 6px; position: relative; z-index: 1; }
+  #menu .logo span { color: #f0ad4e; }
+  #menu .sub { color: #888; font-size: 12px; letter-spacing: 5px; text-transform: uppercase; margin-bottom: 50px; position: relative; z-index: 1; }
   #menuNick {
-    color: #ffff55; font-size: 16px; margin-bottom: 26px;
-    text-shadow: 3px 3px 0 #000; letter-spacing: 2px;
-    padding: 10px 30px;
-    background: rgba(0,0,0,.5);
-    border: 2px solid #555;
+    position: relative; z-index: 1; color: #f0ad4e; font-size: 20px; font-weight: 700;
+    letter-spacing: 3px; margin-bottom: 40px; padding: 16px 50px;
+    background: rgba(240,173,78,.06); border: 1px solid rgba(240,173,78,.3);
+    border-radius: 4px; text-align: center;
   }
-  #menuNick .label { color: #888; font-size: 9px; }
-
+  #menuNick .label { color: #666; font-size: 10px; font-weight: 400; letter-spacing: 3px; margin-bottom: 6px; }
   .mc-btn {
-    width: 360px; padding: 15px 0; font-size: 13px; color: #fff; cursor: pointer;
-    background: #6f6f6f; border: 2px solid; border-color: #aaa #565656 #565656 #aaa;
-    box-shadow: inset 0 -4px 0 rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.25), 0 0 0 2px #000;
-    text-shadow: 2px 2px 0 #3f3f3f;
+    position: relative; z-index: 1; width: 360px; padding: 16px 0;
+    font-size: 14px; font-weight: 700; letter-spacing: 3px;
+    text-transform: uppercase; color: #fff; cursor: pointer;
+    font-family: inherit; background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.15); border-radius: 4px; transition: 0.2s;
   }
-  .mc-btn:hover { background: #7f8cff; border-color: #c3caff #4a55b0 #4a55b0 #c3caff; }
-  .mc-btn:active { transform: translateY(2px); }
+  .mc-btn:hover { background: rgba(240,173,78,.15); border-color: #f0ad4e; color: #f0ad4e; }
+  .mc-btn:active { transform: scale(.98); }
   .mc-btn:disabled { opacity: .5; cursor: default; }
-  .mc-btn.small { width: 360px; margin-top: 12px; font-size: 11px; padding: 12px 0; }
-  #menu .hint { margin-top: 36px; color: #aaa; font-size: 9px; line-height: 2; text-align: center; text-shadow: 1px 1px 0 #000; }
-  #menu .err { color: #ff5555; font-size: 10px; margin-top: 14px; min-height: 14px; text-shadow: 1px 1px 0 #400; max-width: 360px; text-align: center; }
-  #menu .ver { position: absolute; left: 8px; bottom: 6px; color: #888; font-size: 9px; }
+  .mc-btn.primary {
+    background: linear-gradient(135deg, #f0ad4e 0%, #e8922c 100%);
+    color: #0a0a0c; border: none; box-shadow: 0 4px 25px rgba(240,173,78,.4);
+  }
+  .mc-btn.primary:hover { transform: translateY(-2px); box-shadow: 0 8px 35px rgba(240,173,78,.6); color: #0a0a0c; }
+  .mc-btn.small { width: 360px; margin-top: 12px; font-size: 12px; padding: 14px 0; }
+  #menu .hint { position: relative; z-index: 1; margin-top: 50px; color: #555; font-size: 11px; line-height: 2; text-align: center; letter-spacing: 1px; }
+  #menu .hint b { color: #f0ad4e; font-weight: 600; }
+  #menu .err { position: relative; z-index: 1; color: #ff5555; font-size: 12px; margin-top: 16px; min-height: 16px; max-width: 360px; text-align: center; }
+  #menu .ver { position: absolute; left: 20px; bottom: 16px; color: #333; font-size: 11px; letter-spacing: 1px; }
 
   /* ============ НАСТРОЙКИ ============ */
   #settings {
     position: fixed; inset: 0; z-index: 110;
     display: none; flex-direction: column; align-items: center; justify-content: center;
-    background: rgba(0,0,0,.92);
-    padding: 20px;
+    background: rgba(10,10,12,.98); padding: 20px;
   }
-  #settings .title {
-    color: #f0ad4e; font-size: 22px; letter-spacing: 3px; margin-bottom: 30px;
-    text-shadow: 3px 3px 0 #000;
-  }
+  #settings .title { color: #f0ad4e; font-size: 28px; font-weight: 900; letter-spacing: 5px; margin-bottom: 30px; }
   #settings .box {
-    width: 560px; max-width: 95vw; max-height: 80vh; overflow-y: auto;
-    background: rgba(20,20,20,.95); border: 3px solid #565656; outline: 2px solid #000;
-    padding: 24px;
+    width: 560px; max-width: 95vw; max-height: 75vh; overflow-y: auto;
+    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
+    border-radius: 8px; padding: 8px 28px;
   }
   .settingRow {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 14px 0; border-bottom: 1px solid #2a2a2a;
+    padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,.06);
   }
   .settingRow:last-child { border-bottom: none; }
-  .settingRow label { color: #ddd; font-size: 11px; }
-  .settingRow .val { color: #f0ad4e; font-size: 11px; margin-left: 12px; }
+  .settingRow label { color: #ddd; font-size: 13px; font-weight: 500; }
+  .settingRow .val { color: #f0ad4e; font-size: 13px; font-weight: 700; margin-left: 10px; font-family: 'JetBrains Mono', monospace; }
   .toggle {
-    width: 60px; height: 30px; background: #333; border-radius: 15px;
-    position: relative; cursor: pointer; transition: 0.3s; border: 1px solid #555;
+    width: 52px; height: 28px; background: rgba(255,255,255,.1);
+    border-radius: 14px; position: relative; cursor: pointer; transition: 0.3s;
   }
-  .toggle.active { background: #44bb44; }
+  .toggle.active { background: #f0ad4e; }
   .toggle .knob {
-    width: 24px; height: 24px; background: #fff; border-radius: 50%;
-    position: absolute; top: 2px; left: 2px; transition: 0.3s;
+    width: 22px; height: 22px; background: #fff; border-radius: 50%;
+    position: absolute; top: 3px; left: 3px; transition: 0.3s;
+    box-shadow: 0 2px 6px rgba(0,0,0,.3);
   }
-  .toggle.active .knob { left: 32px; }
+  .toggle.active .knob { left: 27px; }
   input[type="range"] {
-    width: 200px; accent-color: #f0ad4e;
+    width: 200px; height: 4px; -webkit-appearance: none; appearance: none;
+    background: rgba(255,255,255,.15); border-radius: 2px; outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px;
+    background: #f0ad4e; border-radius: 50%; cursor: pointer;
+    box-shadow: 0 0 10px rgba(240,173,78,.5);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 16px; background: #f0ad4e; border-radius: 50%;
+    cursor: pointer; border: none;
   }
   select {
-    background: #222; border: 2px solid #555; color: #fff;
-    padding: 6px 12px; font-size: 11px; font-family: inherit;
-    outline: none;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.15);
+    color: #fff; padding: 8px 14px; font-size: 13px; font-family: inherit;
+    border-radius: 4px; outline: none; cursor: pointer;
   }
-  .settingsBtns {
-    margin-top: 24px; display: flex; gap: 14px; justify-content: center;
-  }
+  select:hover { border-color: #f0ad4e; }
+  .settingsBtns { margin-top: 30px; display: flex; gap: 14px; justify-content: center; }
   .settingsBtns button {
-    padding: 12px 30px; font-size: 11px; cursor: pointer;
-    background: #6f6f6f; color: #fff; border: 2px solid;
-    border-color: #aaa #565656 #565656 #aaa; font-family: inherit;
-    text-shadow: 2px 2px 0 #3f3f3f;
+    padding: 14px 40px; font-size: 13px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase; cursor: pointer;
+    background: rgba(255,255,255,.05); color: #fff;
+    border: 1px solid rgba(255,255,255,.15); border-radius: 4px;
+    font-family: inherit; transition: 0.2s;
   }
-  .settingsBtns button:hover { background: #7f8cff; }
+  .settingsBtns button:hover { background: rgba(240,173,78,.15); border-color: #f0ad4e; color: #f0ad4e; }
 
   /* ============ ИГРА ============ */
   #teamBanner { position: fixed; inset: 0; z-index: 90; display: none; align-items: center; justify-content: center; flex-direction: column; pointer-events: none; }
-  #teamBanner .big { font-size: 34px; text-shadow: 4px 4px 0 #000; }
-  #teamBanner .small { font-size: 12px; color: #eee; margin-top: 18px; text-shadow: 2px 2px 0 #000; }
+  #teamBanner .big { font-size: 42px; font-weight: 900; letter-spacing: 6px; text-shadow: 4px 4px 0 #000; }
+  #teamBanner .small { font-size: 13px; color: #ccc; margin-top: 20px; text-shadow: 2px 2px 0 #000; letter-spacing: 2px; }
 
-  #roundWin { position: fixed; inset: 0; z-index: 95; display: none; align-items: center; justify-content: center; flex-direction: column; background: rgba(0,0,0,.7); pointer-events: none; }
-  #roundWin .winText { font-size: 40px; text-shadow: 5px 5px 0 #000; letter-spacing: 4px; }
-  #roundWin .winSub { font-size: 12px; color: #ccc; margin-top: 20px; text-shadow: 2px 2px 0 #000; }
+  #roundWin { position: fixed; inset: 0; z-index: 95; display: none; align-items: center; justify-content: center; flex-direction: column; background: rgba(0,0,0,.75); pointer-events: none; }
+  #roundWin .winText { font-size: 48px; font-weight: 900; letter-spacing: 8px; text-shadow: 5px 5px 0 #000; }
+  #roundWin .winSub { font-size: 14px; color: #ccc; margin-top: 24px; letter-spacing: 3px; text-shadow: 2px 2px 0 #000; }
   #roundWin.red .winText { color: #ff5555; }
   #roundWin.blue .winText { color: #7f9fff; }
 
@@ -141,29 +170,36 @@
   #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
   #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
 
-  #scoreTop { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; align-items: center; background: rgba(0,0,0,.45); padding: 8px 18px; border: 2px solid #000; }
-  #scoreTop .red { color: #ff5555; font-size: 18px; text-shadow: 2px 2px 0 #000; }
-  #scoreTop .blue { color: #7f9fff; font-size: 18px; text-shadow: 2px 2px 0 #000; }
-  #scoreTop .vs { color: #ccc; font-size: 10px; }
+  #killfeed { position: absolute; top: 100px; right: 20px; text-align: right; }
+  #killfeed div {
+    font-size: 12px; color: #fff; background: rgba(0,0,0,.65);
+    padding: 6px 12px; margin-bottom: 5px; border-radius: 3px;
+    border-left: 3px solid #888;
+  }
+  #killfeed .r { color: #ff7777; border-left-color: #ff5555; }
+  #killfeed .b { color: #88a7ff; border-left-color: #7f9fff; }
 
-  #killfeed { position: absolute; top: 12px; right: 12px; text-align: right; }
-  #killfeed div { font-size: 9px; color: #fff; background: rgba(0,0,0,.5); padding: 5px 8px; margin-bottom: 4px; text-shadow: 1px 1px 0 #000; }
-  #killfeed .r { color: #ff7777; } #killfeed .b { color: #88a7ff; }
+  #hearts { position: absolute; left: 24px; bottom: 24px; display: flex; flex-direction: column; gap: 4px; }
+  #hpBarWrap { width: 200px; height: 12px; background: rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.2); border-radius: 2px; overflow: hidden; }
+  #hpBar { width: 100%; height: 100%; background: linear-gradient(90deg, #4ade80, #22c55e); transition: width .2s; }
+  #hpNum { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 700; color: #4ade80; text-shadow: 2px 2px 0 #000; }
 
-  #hearts { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); display: flex; gap: 1px; }
-  #hearts img { width: 22px; height: 22px; image-rendering: pixelated; }
+  #hotbar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; }
+  .slot {
+    width: 64px; height: 64px; background: rgba(15,15,20,.85);
+    border: 2px solid rgba(255,255,255,.15); border-radius: 6px;
+    margin: 0 3px; display: flex; align-items: center; justify-content: center;
+    position: relative; transition: 0.15s;
+  }
+  .slot.sel { border-color: #f0ad4e; background: rgba(240,173,78,.1); box-shadow: 0 0 15px rgba(240,173,78,.3); }
+  .slot img { width: 44px; height: 44px; }
+  .slot .key { position: absolute; top: 2px; left: 6px; font-size: 10px; color: #aaa; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+  .slot .cnt { position: absolute; bottom: 3px; right: 6px; font-size: 11px; color: #fff; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
 
-  #hotbar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; }
-  .slot { width: 58px; height: 58px; background: rgba(30,30,30,.75); border: 3px solid #565656; outline: 2px solid #000; margin: 0 1px; display: flex; align-items: center; justify-content: center; position: relative; }
-  .slot.sel { border-color: #fff; }
-  .slot img { width: 44px; height: 44px; image-rendering: pixelated; }
-  .slot .key { position: absolute; top: 1px; left: 3px; font-size: 8px; color: #ddd; text-shadow: 1px 1px 0 #000; }
-  .slot .cnt { position: absolute; bottom: 2px; right: 3px; font-size: 9px; color: #fff; text-shadow: 1px 1px 0 #000; }
-
-  #ammo { position: absolute; right: 20px; bottom: 20px; text-align: right; }
-  #ammo .num { font-size: 28px; color: #fff; text-shadow: 3px 3px 0 #000; }
-  #ammo .wname { font-size: 9px; color: #ccc; margin-top: 6px; text-shadow: 1px 1px 0 #000; }
-  #ammo .rel { font-size: 10px; color: #ffff55; margin-top: 6px; display: none; text-shadow: 1px 1px 0 #000; }
+  #ammo { position: absolute; right: 24px; bottom: 24px; text-align: right; }
+  #ammo .num { font-size: 32px; font-weight: 700; color: #fff; text-shadow: 2px 2px 0 #000; font-family: 'JetBrains Mono', monospace; }
+  #ammo .wname { font-size: 12px; color: #aaa; margin-top: 6px; letter-spacing: 2px; text-transform: uppercase; }
+  #ammo .rel { font-size: 13px; color: #f0ad4e; margin-top: 8px; display: none; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
 
   #hitmarker { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%) rotate(45deg); width: 26px; height: 26px; opacity: 0; pointer-events: none; }
   #hitmarker::before, #hitmarker::after { content:''; position: absolute; background: #fff; }
@@ -171,131 +207,231 @@
   #hitmarker::after { left: 0; top: 12px; width: 26px; height: 2px; }
   #hitmarker.head::before, #hitmarker.head::after { background: #ff4444; }
 
-  #dmgVignette { position: absolute; inset: 0; opacity: 0; transition: opacity .35s; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,.55) 100%); }
+  #dmgVignette { position: absolute; inset: 0; opacity: 0; transition: opacity .35s; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,.55) 100%); pointer-events: none; }
 
-  #deathScreen { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(120, 0, 0, 0.45); }
-  #deathScreen .t { font-size: 36px; color: #fff; text-shadow: 4px 4px 0 #500; }
-  #deathScreen .by { font-size: 12px; color: #eee; margin-top: 20px; text-shadow: 2px 2px 0 #000; }
-  #deathScreen .cd { font-size: 14px; color: #ffff55; margin-top: 26px; text-shadow: 2px 2px 0 #000; }
+  #deathScreen { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(120, 0, 0, 0.5); pointer-events: none; }
+  #deathScreen .t { font-size: 48px; font-weight: 900; letter-spacing: 6px; color: #fff; text-shadow: 4px 4px 0 #500; }
+  #deathScreen .by { font-size: 14px; color: #eee; margin-top: 24px; letter-spacing: 2px; }
+  #deathScreen .cd { font-size: 15px; color: #f0ad4e; margin-top: 30px; letter-spacing: 2px; }
 
-  #scoreboard { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); display: none; background: rgba(0,0,0,.8); border: 3px solid #565656; outline: 2px solid #000; padding: 18px 26px; min-width: 560px; }
-  #scoreboard h3 { font-size: 12px; margin: 8px 0; text-shadow: 2px 2px 0 #000; }
-  #scoreboard h3.red { color: #ff5555; } #scoreboard h3.blue { color: #7f9fff; }
-  #scoreboard table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-  #scoreboard td, #scoreboard th { font-size: 9px; color: #ddd; padding: 4px 8px; text-align: left; text-shadow: 1px 1px 0 #000; }
-  #scoreboard th { color: #999; }
-  #scoreboard td.me { color: #ffff55; }
+  #scoreboard {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    display: none; background: rgba(10,10,14,.95);
+    border: 1px solid rgba(255,255,255,.15); border-radius: 8px;
+    padding: 24px 32px; min-width: 620px;
+  }
+  #scoreboard h3 { font-size: 14px; font-weight: 700; margin: 12px 0 8px; letter-spacing: 2px; }
+  #scoreboard h3.red { color: #ff5555; }
+  #scoreboard h3.blue { color: #7f9fff; }
+  #scoreboard table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  #scoreboard td, #scoreboard th { font-size: 12px; color: #ddd; padding: 6px 10px; text-align: left; font-family: 'JetBrains Mono', monospace; }
+  #scoreboard th { color: #888; font-size: 10px; letter-spacing: 1px; }
+  #scoreboard td.me { color: #f0ad4e; font-weight: 700; }
 
-  #pauseHint { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); display: none; flex-direction: column; align-items: center; gap: 14px; background: rgba(0,0,0,.75); border: 3px solid #565656; outline: 2px solid #000; padding: 26px 34px; }
-  #pauseHint .t { color: #fff; font-size: 14px; text-shadow: 2px 2px 0 #000; }
-  #pauseHint .c { color: #aaa; font-size: 9px; line-height: 2.1; text-align: center; }
-  #pauseHint button { pointer-events: auto; width: 280px; padding: 12px 0; font-size: 11px; }
+  #pauseHint {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    display: none; flex-direction: column; align-items: center; gap: 16px;
+    background: rgba(10,10,14,.95); border: 1px solid rgba(255,255,255,.15);
+    border-radius: 8px; padding: 32px 44px;
+  }
+  #pauseHint .t { color: #fff; font-size: 22px; font-weight: 900; letter-spacing: 4px; }
+  #pauseHint .c { color: #999; font-size: 12px; line-height: 2.1; text-align: center; letter-spacing: 1px; }
+  #pauseHint button { pointer-events: auto; width: 300px; padding: 14px 0; font-size: 13px; }
 
   #respawnFlash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
 
-  #chat { position: absolute; left: 12px; bottom: 96px; width: 440px; max-width: 45vw; display: flex; flex-direction: column; justify-content: flex-end; }
+  /* ============ CHAT ============ */
+  #chat { position: absolute; left: 20px; bottom: 110px; width: 460px; max-width: 45vw; display: flex; flex-direction: column; justify-content: flex-end; }
   #chatMessages { display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
-  #chatMessages div { font-size: 9px; line-height: 1.6; color: #fff; text-shadow: 1px 1px 0 #000; background: rgba(0,0,0,.45); padding: 4px 7px; word-wrap: break-word; transition: opacity .6s; }
-  #chatMessages .nick { font-weight: bold; }
+  #chatMessages div {
+    font-size: 12px; line-height: 1.5; color: #fff;
+    background: rgba(0,0,0,.6); padding: 5px 10px;
+    border-radius: 3px; word-wrap: break-word; transition: opacity .6s;
+  }
+  #chatMessages .nick { font-weight: 700; }
   #chatMessages .nick.r { color: #ff7777; }
   #chatMessages .nick.b { color: #88a7ff; }
-  #chatMessages .sys { color: #ffff55; }
-  #chatInput { display: none; margin-top: 6px; width: 100%; padding: 9px 8px; font-size: 10px; color: #fff; background: rgba(0,0,0,.65); border: 2px solid #a0a0a0; outline: none; pointer-events: auto; }
-  #chatInput:focus { border-color: #fff; }
+  #chatMessages .sys { color: #f0ad4e; }
+  #chatInput {
+    display: none; margin-top: 6px; width: 100%; padding: 10px 12px;
+    font-size: 12px; color: #fff; background: rgba(0,0,0,.7);
+    border: 1px solid rgba(255,255,255,.2); border-radius: 4px;
+    outline: none; pointer-events: auto; font-family: inherit;
+  }
+  #chatInput:focus { border-color: #f0ad4e; }
 
-  #voiceInd { position: absolute; left: 12px; bottom: 60px; display: none; align-items: center; gap: 8px; background: rgba(0,0,0,.55); border: 2px solid #2c8c2c; padding: 7px 11px; }
-  #voiceInd .dot { width: 10px; height: 10px; background: #44dd44; animation: micPulse .7s infinite alternate; }
+  #voiceInd {
+    position: absolute; left: 20px; bottom: 70px; display: none;
+    align-items: center; gap: 8px;
+    background: rgba(0,0,0,.7); border: 1px solid #2c8c2c;
+    border-radius: 4px; padding: 8px 14px;
+  }
+  #voiceInd .dot { width: 10px; height: 10px; background: #44dd44; border-radius: 50%; animation: micPulse .7s infinite alternate; }
   @keyframes micPulse { from { opacity: .4; } to { opacity: 1; } }
-  #voiceInd span { font-size: 9px; color: #aaffaa; text-shadow: 1px 1px 0 #030; }
+  #voiceInd span { font-size: 11px; color: #aaffaa; letter-spacing: 1px; }
 
-  #plantProgress { position: fixed; left: 50%; bottom: 180px; transform: translateX(-50%); display: none; width: 420px; padding: 16px; background: rgba(0,0,0,.85); border: 3px solid #f0ad4e; outline: 2px solid #000; z-index: 80; }
-  #plantProgressLabel { color: #f0ad4e; font-size: 11px; text-align: center; margin-bottom: 10px; text-shadow: 2px 2px 0 #000; letter-spacing: 1px; }
-  #plantProgressBar { width: 100%; height: 22px; background: #222; border: 2px solid #000; overflow: hidden; }
+  /* ============ БОМБА ============ */
+  #plantProgress {
+    position: fixed; left: 50%; bottom: 180px; transform: translateX(-50%);
+    display: none; width: 420px; padding: 16px;
+    background: rgba(10,10,14,.95); border: 1px solid #f0ad4e;
+    border-radius: 6px; z-index: 80;
+  }
+  #plantProgressLabel { color: #f0ad4e; font-size: 13px; text-align: center; margin-bottom: 10px; font-weight: 700; letter-spacing: 2px; }
+  #plantProgressBar { width: 100%; height: 20px; background: #222; border-radius: 3px; overflow: hidden; }
   #plantProgressFill { width: 0%; height: 100%; background: linear-gradient(90deg, #f0ad4e, #ff6b00); transition: width .05s linear; }
 
-  #bombTimer { position: fixed; top: 120px; left: 50%; transform: translateX(-50%); display: none; font-size: 32px; font-weight: bold; color: #ffaa00; text-shadow: 3px 3px 0 #000; z-index: 80; letter-spacing: 2px; }
+  #bombTimer {
+    position: fixed; top: 140px; left: 50%; transform: translateX(-50%);
+    display: none; font-size: 36px; font-weight: 700;
+    color: #ffaa00; text-shadow: 3px 3px 0 #000;
+    z-index: 80; letter-spacing: 2px;
+    font-family: 'JetBrains Mono', monospace;
+  }
 
   /* ============ РАДАР ============ */
   #radar {
     position: fixed; top: 20px; right: 20px; z-index: 70;
-    width: 180px; height: 180px;
-    background: rgba(0,0,0,.55); border: 2px solid #555;
-    border-radius: 50%; overflow: hidden; display: none;
+    width: 180px; height: 180px; background: rgba(0,0,0,.6);
+    border: 1px solid rgba(255,255,255,.2); border-radius: 50%;
+    overflow: hidden; display: none;
   }
   #radar canvas { width: 100%; height: 100%; display: block; }
 
   /* ============ FPS ============ */
   #fpsCounter {
-    position: fixed; top: 6px; left: 50%; transform: translateX(-50%);
-    z-index: 200; color: #44ff44; font-size: 11px;
-    text-shadow: 1px 1px 0 #000; pointer-events: none;
-    display: none;
+    position: fixed; top: 6px; right: 20px; z-index: 200;
+    color: #44ff44; font-size: 12px; font-family: 'JetBrains Mono', monospace;
+    text-shadow: 1px 1px 0 #000; pointer-events: none; display: none;
   }
 
   /* ============ ЧИТ-ПАНЕЛЬ ============ */
   #cheatPanel {
-    position: fixed; top: 80px; right: 20px; z-index: 85;
+    position: fixed; top: 220px; right: 20px; z-index: 85;
     display: none; flex-direction: column; gap: 8px;
-    background: rgba(20,0,0,.85); border: 2px solid #ff2222;
-    padding: 14px 18px; box-shadow: 0 0 25px rgba(255,34,34,.5);
+    background: rgba(20,0,0,.9); border: 1px solid #ff2222;
+    border-radius: 6px; padding: 14px 18px;
+    box-shadow: 0 0 25px rgba(255,34,34,.5);
   }
-  #cheatPanel .title { color: #ff5555; font-size: 11px; text-align: center; margin-bottom: 8px; letter-spacing: 2px; text-shadow: 2px 2px 0 #000; }
-  #cheatPanel .cheatRow { display: flex; justify-content: space-between; align-items: center; gap: 15px; font-size: 9px; color: #ccc; }
-  #cheatPanel .cheatRow .key { background: #333; padding: 3px 8px; border: 1px solid #555; color: #fff; font-weight: bold; }
-  #cheatPanel .cheatRow .val { color: #888; }
+  #cheatPanel .title { color: #ff5555; font-size: 12px; text-align: center; margin-bottom: 8px; letter-spacing: 2px; font-weight: 700; }
+  #cheatPanel .cheatRow { display: flex; justify-content: space-between; align-items: center; gap: 15px; font-size: 11px; color: #ccc; }
+  #cheatPanel .cheatRow .key { background: #333; padding: 3px 8px; border-radius: 3px; color: #fff; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+  #cheatPanel .cheatRow .val { color: #888; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
   #cheatPanel .cheatRow.active .val { color: #44ff44; }
-  #cheatPanel .hint { color: #888; font-size: 8px; margin-top: 8px; text-align: center; line-height: 1.6; }
+  #cheatPanel .hint { color: #888; font-size: 10px; margin-top: 8px; text-align: center; line-height: 1.6; }
 
-  /* ============ МОБИЛЬНОЕ УПРАВЛЕНИЕ ============ */
-  #mobileControls {
-    position: fixed; inset: 0; z-index: 75;
-    display: none; pointer-events: none;
-  }
+  /* ============ МОБИЛЬНОЕ ============ */
+  #mobileControls { position: fixed; inset: 0; z-index: 75; display: none; pointer-events: none; }
   #mobileControls.active { display: block; }
-  #joystickZone {
-    position: absolute; bottom: 30px; left: 30px;
-    width: 200px; height: 200px;
-    pointer-events: auto; touch-action: none;
-  }
-  #joystickBase {
-    width: 160px; height: 160px;
-    background: rgba(255,255,255,.1);
-    border: 2px solid rgba(240,173,78,.6);
-    border-radius: 50%;
-    position: absolute; bottom: 20px; left: 20px;
-  }
-  #joystickKnob {
-    width: 70px; height: 70px;
-    background: rgba(240,173,78,.7);
-    border-radius: 50%;
-    position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    box-shadow: 0 0 15px rgba(240,173,78,.5);
-  }
+  #joystickZone { position: absolute; bottom: 30px; left: 30px; width: 200px; height: 200px; pointer-events: auto; touch-action: none; }
+  #joystickBase { width: 160px; height: 160px; background: rgba(255,255,255,.08); border: 2px solid rgba(240,173,78,.5); border-radius: 50%; position: absolute; bottom: 20px; left: 20px; }
+  #joystickKnob { width: 70px; height: 70px; background: rgba(240,173,78,.6); border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
   .mobileBtn {
     width: 80px; height: 80px; border-radius: 50%;
-    background: rgba(240,173,78,.3);
-    border: 2px solid rgba(240,173,78,.7);
-    color: #fff; font-size: 24px; font-weight: bold;
-    cursor: pointer; touch-action: none;
-    position: absolute; pointer-events: auto;
-    display: flex; align-items: center; justify-content: center;
+    background: rgba(240,173,78,.25); border: 2px solid rgba(240,173,78,.6);
+    color: #fff; font-size: 22px; font-weight: 700;
+    cursor: pointer; touch-action: none; position: absolute;
+    pointer-events: auto; display: flex; align-items: center; justify-content: center;
   }
-  .mobileBtn:active { background: rgba(240,173,78,.7); transform: scale(.95); }
-  #fireBtn { bottom: 110px; right: 40px; width: 100px; height: 100px; background: rgba(235,75,75,.4); border-color: rgba(235,75,75,.8); font-size: 32px; }
+  .mobileBtn:active { background: rgba(240,173,78,.6); transform: scale(.95); }
+  #fireBtn { bottom: 110px; right: 40px; width: 100px; height: 100px; background: rgba(235,75,75,.35); border-color: rgba(235,75,75,.8); font-size: 30px; }
   #reloadBtn { bottom: 40px; right: 160px; }
   #jumpBtn { bottom: 40px; right: 40px; }
   #bombBtn { bottom: 130px; right: 160px; font-size: 18px; }
 
-  /* ============ АДАПТИВ ============ */
+  /* ============ РАУНД-ТАЙМЕР ============ */
+  #roundTimer {
+    position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+    z-index: 60; text-align: center;
+    background: rgba(0,0,0,.7); border: 1px solid rgba(240,173,78,.4);
+    border-radius: 6px; padding: 8px 24px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  #roundTimer .roundScore { font-size: 20px; font-weight: 700; letter-spacing: 2px; }
+  #roundTimer .roundScore .red { color: #ff5555; }
+  #roundTimer .roundScore .blue { color: #7f9fff; }
+  #roundTimer .roundScore .divider { color: #555; margin: 0 8px; }
+  #roundTimer .timer { font-size: 22px; font-weight: 700; color: #fff; margin-top: 2px; letter-spacing: 2px; }
+  #roundTimer .timer.warning { color: #ff5555; animation: pulseTimer .5s infinite alternate; }
+  @keyframes pulseTimer { from { opacity: 1; } to { opacity: .5; } }
+  #roundTimer .phase { font-size: 10px; color: #f0ad4e; letter-spacing: 3px; margin-top: 2px; font-weight: 600; }
+
+  /* ============ ДЕНЬГИ / БРОНЯ ============ */
+  #moneyHud {
+    position: fixed; top: 20px; left: 20px; z-index: 60;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px; font-weight: 700; color: #6ab04c;
+    text-shadow: 2px 2px 0 #000;
+  }
+  #moneyHud.spent { color: #ff5555; }
+  #armorHud {
+    position: fixed; bottom: 90px; right: 24px; z-index: 60;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px; font-weight: 700; color: #6ab0ff;
+    text-shadow: 2px 2px 0 #000;
+  }
+
+  /* ============ BUY MENU ============ */
+  #buyMenu {
+    position: fixed; inset: 0; z-index: 200;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.85); backdrop-filter: blur(8px);
+  }
+  #buyMenu.active { display: flex; }
+  #buyMenu .buyBox {
+    width: 800px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+    background: rgba(15,15,20,.98);
+    border: 1px solid rgba(240,173,78,.4);
+    border-radius: 8px; padding: 32px 40px;
+  }
+  #buyMenu .buyTitle { font-size: 24px; font-weight: 900; letter-spacing: 4px; color: #f0ad4e; text-align: center; margin-bottom: 8px; }
+  #buyMenu .buyMoney { text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 20px; color: #6ab04c; font-weight: 700; margin-bottom: 28px; }
+  #buyMenu .buyGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  #buyMenu .buyItem {
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 6px; padding: 20px 14px;
+    text-align: center; cursor: pointer; transition: 0.15s;
+    position: relative;
+  }
+  #buyMenu .buyItem:hover {
+    background: rgba(240,173,78,.1); border-color: #f0ad4e;
+    transform: translateY(-3px);
+  }
+  #buyMenu .buyItem.disabled { opacity: .3; cursor: not-allowed; filter: grayscale(1); }
+  #buyMenu .buyItem.disabled:hover { transform: none; background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.1); }
+  #buyMenu .buyItem .icon { font-size: 38px; margin-bottom: 10px; }
+  #buyMenu .buyItem .name { font-size: 13px; color: #fff; font-weight: 600; margin-bottom: 8px; letter-spacing: 1px; }
+  #buyMenu .buyItem .price { font-size: 14px; color: #6ab04c; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+  #buyMenu .buyItem .key {
+    position: absolute; top: 8px; right: 10px;
+    background: rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.2);
+    border-radius: 3px; padding: 2px 7px;
+    font-size: 10px; color: #aaa; font-family: 'JetBrains Mono', monospace;
+  }
+  #buyMenu .buyHint { text-align: center; color: #666; font-size: 11px; margin-top: 24px; letter-spacing: 2px; }
+
+  /* ============ MATCH END ============ */
+  #matchEndScreen {
+    position: fixed; inset: 0; z-index: 250;
+    display: none; align-items: center; justify-content: center; flex-direction: column;
+    background: rgba(0,0,0,.92);
+  }
+  #matchEndScreen.active { display: flex; }
+  #matchEndScreen .matchWin { font-size: 56px; font-weight: 900; letter-spacing: 8px; text-shadow: 6px 6px 0 #000; }
+  #matchEndScreen .matchWin.red { color: #ff5555; }
+  #matchEndScreen .matchWin.blue { color: #7f9fff; }
+  #matchEndScreen .matchScore { font-size: 80px; font-weight: 900; color: #fff; margin: 30px 0; font-family: 'JetBrains Mono', monospace; letter-spacing: 8px; }
+  #matchEndScreen .matchSub { font-size: 14px; color: #888; letter-spacing: 3px; }
+
   @media (max-width: 700px) {
-    #menu .logo { font-size: 32px; }
-    .mc-btn { width: 300px; font-size: 11px; padding: 12px 0; }
-    .auth-input { width: 300px; font-size: 11px; }
-    .auth-btn { width: 300px; font-size: 11px; }
-    #settings .box { width: 100%; padding: 16px; }
-    .settingRow label { font-size: 9px; }
+    #menu .logo, #authScreen .logo { font-size: 36px; letter-spacing: 5px; }
+    .mc-btn, .auth-btn, .auth-input { width: 300px; font-size: 12px; }
+    #settings .box { width: 100%; padding: 8px 18px; }
+    .settingRow label { font-size: 12px; }
     #radar { width: 120px; height: 120px; }
+    #buyMenu .buyGrid { grid-template-columns: repeat(2, 1fr); }
+    #killfeed { top: 130px; }
   }
 </style>
 </head>
@@ -304,36 +440,32 @@
 
   <!-- ============ ЭКРАН РЕГИСТРАЦИИ ============ -->
   <div id="authScreen">
-    <div class="logo">БЛОКАДА</div>
-    <div class="sub">РЕГИСТРАЦИЯ</div>
+    <div class="logo">БЛОКА<span>ДА</span></div>
+    <div class="sub">Тактический шутер · Регистрация</div>
     <input id="regName" class="auth-input" maxlength="16" placeholder="Введи свой ник" autocomplete="off">
     <input id="regPassword" class="auth-input" type="password" maxlength="32" placeholder="Пароль" autocomplete="off">
-    <button id="regBtn" class="auth-btn">ВОЙТИ В ИГРУ</button>
+    <button id="regBtn" class="auth-btn">Войти в игру</button>
     <div id="authErr"></div>
   </div>
 
   <!-- ============ ГЛАВНОЕ МЕНЮ ============ -->
   <div id="menu">
-    <div class="logo">БЛОКАДА</div>
-    <div class="splash">Also try Minecraft!</div>
-    <div class="sub">3D ШУТЕР · КРАСНЫЕ ПРОТИВ СИНИХ</div>
-
+    <div class="logo">БЛОКА<span>ДА</span></div>
+    <div class="sub">Красные против Синих</div>
     <div id="menuNick">
       <div class="label">ТВОЙ НИК</div>
       <div id="menuNickText">—</div>
     </div>
-
-    <button id="playBtn" class="mc-btn">ИГРАТЬ</button>
-    <button id="settingsBtn" class="mc-btn small">НАСТРОЙКИ</button>
-    <button id="logoutBtn" class="mc-btn small">СМЕНИТЬ НИК</button>
-
+    <button id="playBtn" class="mc-btn primary">Играть</button>
+    <button id="settingsBtn" class="mc-btn small">Настройки</button>
+    <button id="logoutBtn" class="mc-btn small">Сменить ник</button>
     <div class="err" id="menuErr"></div>
     <div class="hint">
-      WASD — движение · ЛКМ — огонь · ПКМ — прицел<br>
-      1-5 — оружие · ПРОБЕЛ — прыжок · SHIFT — бег · TAB — счёт<br>
-      T — чат · V (зажать) — голос · E — бомба · M — радар
+      <b>WASD</b> движение · <b>ЛКМ</b> огонь · <b>ПКМ</b> прицел<br>
+      <b>B</b> магазин · <b>R</b> перезарядка · <b>E</b> бомба · <b>M</b> радар<br>
+      <b>1-5</b> оружие · <b>TAB</b> счёт · <b>T</b> чат · <b>V</b> голос
     </div>
-    <div class="ver">Blockade v1.4 · made with Cursor</div>
+    <div class="ver">Blockade v2.0</div>
   </div>
 
   <!-- ============ НАСТРОЙКИ ============ -->
@@ -341,27 +473,27 @@
     <div class="title">НАСТРОЙКИ</div>
     <div class="box">
       <div class="settingRow">
-        <label>📱 Мобильное управление</label>
+        <label>Мобильное управление</label>
         <div class="toggle" id="toggleMobile"><div class="knob"></div></div>
       </div>
       <div class="settingRow">
-        <label>🗺 Радар</label>
+        <label>Радар</label>
         <div class="toggle" id="toggleRadar"><div class="knob"></div></div>
       </div>
       <div class="settingRow">
-        <label>📊 Показывать FPS</label>
+        <label>Показывать FPS</label>
         <div class="toggle" id="toggleFps"><div class="knob"></div></div>
       </div>
       <div class="settingRow">
-        <label>🖱 Чувствительность: <span class="val" id="sensVal">2.0</span></label>
+        <label>Чувствительность: <span class="val" id="sensVal">2.0</span></label>
         <input type="range" id="sensRange" min="0.5" max="5" step="0.1" value="2.0">
       </div>
       <div class="settingRow">
-        <label>🔊 Громкость: <span class="val" id="volVal">50%</span></label>
+        <label>Громкость: <span class="val" id="volVal">50%</span></label>
         <input type="range" id="volRange" min="0" max="100" step="1" value="50">
       </div>
       <div class="settingRow">
-        <label>🎨 Качество графики</label>
+        <label>Качество графики</label>
         <select id="qualitySelect">
           <option value="low">Низкое</option>
           <option value="medium" selected>Среднее</option>
@@ -370,7 +502,7 @@
       </div>
     </div>
     <div class="settingsBtns">
-      <button id="settingsBack">НАЗАД</button>
+      <button id="settingsBack">Назад</button>
     </div>
   </div>
 
@@ -384,18 +516,35 @@
     <div class="winSub" id="roundWinSub"></div>
   </div>
 
+  <!-- ============ ИГРА ============ -->
   <div id="hud">
     <div id="fpsCounter">FPS: 60</div>
+
+    <!-- Раунд-таймер -->
+    <div id="roundTimer">
+      <div class="roundScore">
+        <span class="red" id="matchRed">0</span>
+        <span class="divider">:</span>
+        <span class="blue" id="matchBlue">0</span>
+      </div>
+      <div class="timer" id="timerText">1:55</div>
+      <div class="phase" id="phaseText">ЗАКУПКА</div>
+    </div>
+
+    <!-- Деньги и броня -->
+    <div id="moneyHud">$800</div>
+    <div id="armorHud" style="display:none;">🛡 100</div>
+
     <div id="dmgVignette"></div>
     <div id="crosshair"></div>
     <div id="hitmarker"></div>
-    <div id="scoreTop">
-      <span class="red" id="scoreRed">0</span>
-      <span class="vs">КРАСНЫЕ vs СИНИЕ</span>
-      <span class="blue" id="scoreBlue">0</span>
-    </div>
     <div id="killfeed"></div>
-    <div id="hearts"></div>
+
+    <div id="hearts">
+      <div id="hpNum">100</div>
+      <div id="hpBarWrap"><div id="hpBar"></div></div>
+    </div>
+
     <div id="hotbar"></div>
     <div id="ammo">
       <div class="num" id="ammoNum">30 / 30</div>
@@ -407,9 +556,7 @@
 
     <div id="plantProgress">
       <div id="plantProgressLabel">ЗАКЛАДКА БОМБЫ 0%</div>
-      <div id="plantProgressBar">
-        <div id="plantProgressFill"></div>
-      </div>
+      <div id="plantProgressBar"><div id="plantProgressFill"></div></div>
     </div>
     <div id="bombTimer">💣 40.0с</div>
 
@@ -418,20 +565,25 @@
       <div class="by" id="deathBy"></div>
       <div class="cd" id="deathCd"></div>
     </div>
+
     <div id="scoreboard"></div>
+
     <div id="pauseHint">
       <div class="t">ПАУЗА</div>
-      <div class="c">ЛКМ — огонь · ПКМ — прицел<br>R — перезарядка · 1 автомат · 2 дробовик · 3 винтовка<br>4 блоки · 5 кирка · E — бомба · M — радар<br>TAB — счёт · T — чат · V (зажать) — голос</div>
-      <button class="mc-btn" id="resumeBtn">ВЕРНУТЬСЯ В ИГРУ</button>
+      <div class="c">ЛКМ огонь · ПКМ прицел · R перезарядка<br>B магазин · E бомба · M радар<br>TAB счёт · T чат · V голос</div>
+      <button class="mc-btn" id="resumeBtn">Вернуться в игру</button>
     </div>
+
     <div id="respawnFlash"></div>
+
     <div id="chat">
       <div id="chatMessages"></div>
       <input id="chatInput" maxlength="120" placeholder="Сообщение..." autocomplete="off">
     </div>
+
     <div id="voiceInd"><div class="dot"></div><span>МИКРОФОН ВКЛЮЧЁН</span></div>
 
-    <!-- Мобильное управление -->
+    <!-- Мобильное -->
     <div id="mobileControls">
       <div id="joystickZone">
         <div id="joystickBase"><div id="joystickKnob"></div></div>
@@ -455,7 +607,61 @@
         <span class="key">Z</span>
         <span class="val" id="cheatWallVal">OFF</span>
       </div>
-      <div class="hint">X — автонаведение<br>Z — видеть врагов сквозь стены</div>
+      <div class="hint">X автонаведение<br>Z видеть врагов сквозь стены</div>
+    </div>
+
+    <!-- BUY MENU -->
+    <div id="buyMenu">
+      <div class="buyBox">
+        <div class="buyTitle">МАГАЗИН · <span id="buyTimer">15</span>с</div>
+        <div class="buyMoney">$<span id="buyMoneyVal">800</span></div>
+        <div class="buyGrid">
+          <div class="buyItem" data-item="rifle">
+            <div class="icon">🔫</div>
+            <div class="name">AK-47 / M4A4</div>
+            <div class="price">$2700</div>
+            <div class="key">1</div>
+          </div>
+          <div class="buyItem" data-item="shotgun">
+            <div class="icon">💥</div>
+            <div class="name">Дробовик</div>
+            <div class="price">$1200</div>
+            <div class="key">2</div>
+          </div>
+          <div class="buyItem" data-item="sniper">
+            <div class="icon">🎯</div>
+            <div class="name">AWP</div>
+            <div class="price">$4750</div>
+            <div class="key">3</div>
+          </div>
+          <div class="buyItem" data-item="deagle">
+            <div class="icon">🔫</div>
+            <div class="name">Deagle</div>
+            <div class="price">$700</div>
+            <div class="key">4</div>
+          </div>
+          <div class="buyItem" data-item="armor">
+            <div class="icon">🛡</div>
+            <div class="name">Броня + шлем</div>
+            <div class="price">$1000</div>
+            <div class="key">5</div>
+          </div>
+          <div class="buyItem" data-item="he">
+            <div class="icon">💣</div>
+            <div class="name">HE-граната</div>
+            <div class="price">$300</div>
+            <div class="key">6</div>
+          </div>
+        </div>
+        <div class="buyHint">B — закрыть · 1-6 — купить</div>
+      </div>
+    </div>
+
+    <!-- MATCH END -->
+    <div id="matchEndScreen">
+      <div class="matchWin" id="matchWinText">КРАСНЫЕ ПОБЕДИЛИ МАТЧ!</div>
+      <div class="matchScore" id="matchScoreText">16 : 12</div>
+      <div class="matchSub">Новый матч через <span id="matchCountdown">8</span>с</div>
     </div>
   </div>
 
