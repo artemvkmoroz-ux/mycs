@@ -1,182 +1,425 @@
-// Deterministic arena layout shared by all clients.
-// A block at integer (x,y,z) occupies [x,x+1]x[y,y+1]x[z,z+1].
-//
-// MAP: "ПУСТЫННЫЙ ХРАМ" — desert temple arena.
-// Center: hollow step-pyramid with a drop shaft and ground-level corridors.
-// Around it: stone ring road, ruined colonnade, N/S watchtowers,
-// palm oases in the corners, scattered ruins and dunes.
+import * as THREE from 'three';
 
-export const HALF = 32; // playable area: x,z in [-32, 31]
+export const HALF = 64; // половина карты в блоках
 
-function seededRng(seed) {
-  let s = seed >>> 0;
-  return () => {
-    s = (s + 0x6D2B79F5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+// ============================================================
+// ТЕКСТУРЫ
+// ============================================================
+export function buildTextures() {
+  return {
+    sand: makeSand(),
+    wall: makeWall(),
+    stone: makeStone(),
+    wood: makeWood(),
+    redWool: makeWool(0xb03430),
+    blueWool: makeWool(0x3a4fb4),
+    ground: makeGround(),
   };
 }
 
+function makeCanvas() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  return c;
+}
+
+function makeSand() {
+  const c = makeCanvas(); const g = c.getContext('2d');
+  g.fillStyle = '#d4b88a'; g.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 800; i++) {
+    const shade = Math.random() * 50 - 25;
+    g.fillStyle = `rgb(${212+shade},${184+shade},${138+shade})`;
+    g.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
+  return t;
+}
+
+function makeWall() {
+  const c = makeCanvas(); const g = c.getContext('2d');
+  g.fillStyle = '#c9a878'; g.fillRect(0, 0, 64, 64);
+  g.strokeStyle = '#8a6a48'; g.lineWidth = 2;
+  const bh = 16, bw = 32;
+  for (let y = 0; y < 64; y += bh) {
+    g.beginPath(); g.moveTo(0, y); g.lineTo(64, y); g.stroke();
+    const offset = (y / bh) % 2 === 0 ? 0 : bw / 2;
+    for (let x = offset; x < 64; x += bw) {
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + bh); g.stroke();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
+  return t;
+}
+
+function makeStone() {
+  const c = makeCanvas(); const g = c.getContext('2d');
+  g.fillStyle = '#a89878'; g.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 100; i++) {
+    g.fillStyle = `rgba(${120+Math.random()*60},${100+Math.random()*40},${80+Math.random()*30},.5)`;
+    g.beginPath();
+    g.arc(Math.random()*64, Math.random()*64, Math.random()*5, 0, Math.PI*2);
+    g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
+  return t;
+}
+
+function makeWood() {
+  const c = makeCanvas(); const g = c.getContext('2d');
+  g.fillStyle = '#8b5a2b'; g.fillRect(0, 0, 64, 64);
+  g.strokeStyle = '#5a3a1a'; g.lineWidth = 2;
+  for (let y = 8; y < 64; y += 16) {
+    g.beginPath(); g.moveTo(0, y); g.lineTo(64, y); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
+  return t;
+}
+
+function makeWool(color) {
+  const c = makeCanvas(); const g = c.getContext('2d');
+  const r = (color >> 16) & 255, gr = (color >> 8) & 255, b = color & 255;
+  g.fillStyle = `rgb(${r},${gr},${b})`; g.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 400; i++) {
+    const s = Math.random() * 40 - 20;
+    g.fillStyle = `rgb(${r+s},${gr+s},${b+s})`;
+    g.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
+  return t;
+}
+
+function makeGround() {
+  const c = makeCanvas(); const g = c.getContext('2d');
+  g.fillStyle = '#b89868'; g.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 500; i++) {
+    const s = Math.random() * 40 - 20;
+    g.fillStyle = `rgb(${184+s},${152+s},${104+s})`;
+    g.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
+  return t;
+}
+
+export function buildMaterials(tex) {
+  return {
+    sand:     new THREE.MeshLambertMaterial({ map: tex.sand }),
+    wall:     new THREE.MeshLambertMaterial({ map: tex.wall }),
+    stone:    new THREE.MeshLambertMaterial({ map: tex.stone }),
+    wood:     new THREE.MeshLambertMaterial({ map: tex.wood }),
+    redWool:  new THREE.MeshLambertMaterial({ map: tex.redWool }),
+    blueWool: new THREE.MeshLambertMaterial({ map: tex.blueWool }),
+    ground:   new THREE.MeshLambertMaterial({ map: tex.ground }),
+  };
+}
+
+// ============================================================
+// КАРТА de_dust2 — ПО СХЕМЕ МИНИКАРТЫ
+// ============================================================
+//
+//   КООРДИНАТНАЯ СЕТКА (X — вправо, Z — вниз, Y — высота):
+//
+//     X = -64 .. +64  (ширина)
+//     Z = -64 .. +64  (глубина)
+//
+//   Схема (вид сверху):
+//
+//        -64        -32         0        +32       +64
+//   -64  +----------+----------+----------+----------+
+//        |   B SITE |  CT MID  |  CATWALK |  A SITE  |
+//   -32  |    (B)   |          |          |    (A)   |
+//        |  TUNNELS |   MID    |  SHORT   | LONG A   |
+//    0   |          | DOORS    |          |          |
+//        |          |          |          |          |
+//   +32  |   T SPAWN (низ слева)   T SPAWN  |          |
+//        |          |  OUTSIDE |          |          |
+//   +64  +----------+----------+----------+----------+
+//
+// ============================================================
+
+// Хелпер: добавить блок (стена/пол/ящик)
+function addBlock(blocks, x, y, z, type) {
+  blocks.push({ x, y, z, type });
+}
+
+// Хелпер: стена вдоль оси X
+function wallX(blocks, x1, x2, z, y1, y2, type = 'wall') {
+  for (let x = x1; x <= x2; x++) {
+    for (let y = y1; y <= y2; y++) {
+      addBlock(blocks, x, y, z, type);
+    }
+  }
+}
+
+// Хелпер: стена вдоль оси Z
+function wallZ(blocks, z1, z2, x, y1, y2, type = 'wall') {
+  for (let z = z1; z <= z2; z++) {
+    for (let y = y1; y <= y2; y++) {
+      addBlock(blocks, x, y, z, type);
+    }
+  }
+}
+
+// Хелпер: залить прямоугольник стенами (толщина 1)
+function box(blocks, x1, x2, z1, z2, y1, y2, type = 'wall') {
+  for (let x = x1; x <= x2; x++) {
+    for (let z = z1; z <= z2; z++) {
+      for (let y = y1; y <= y2; y++) {
+        addBlock(blocks, x, y, z, type);
+      }
+    }
+  }
+}
+
+// Хелпер: пол (только y=0)
+function floor(blocks, x1, x2, z1, z2, type = 'sand') {
+  for (let x = x1; x <= x2; x++) {
+    for (let z = z1; z <= z2; z++) {
+      addBlock(blocks, x, 0, z, type);
+    }
+  }
+}
+
+// Хелпер: ящик
+function crate(blocks, x, z, size = 2, type = 'wood') {
+  for (let dx = 0; dx < size; dx++) {
+    for (let dz = 0; dz < size; dz++) {
+      for (let y = 1; y <= size; y++) {
+        addBlock(blocks, x + dx, y, z + dz, type);
+      }
+    }
+  }
+}
+
+// ============================================================
+// ГЛАВНАЯ ФУНКЦИЯ
+// ============================================================
 export function buildMapBlocks() {
-  const m = new Map(); // "x,y,z" -> {x,y,z,type}; later writes win
-  const set = (x, y, z, type) => m.set(`${x},${y},${z}`, { x, y, z, type });
-  const del = (x, y, z) => m.delete(`${x},${y},${z}`);
-  const box = (x0, y0, z0, x1, y1, z1, type) => {
-    for (let x = x0; x <= x1; x++)
-      for (let y = y0; y <= y1; y++)
-        for (let z = z0; z <= z1; z++) set(x, y, z, type);
-  };
-  const carve = (x0, y0, z0, x1, y1, z1) => {
-    for (let x = x0; x <= x1; x++)
-      for (let y = y0; y <= y1; y++)
-        for (let z = z0; z <= z1; z++) del(x, y, z);
-  };
+  const blocks = [];
 
-  const r = seededRng(4242);
+  // === ПОЛ ВСЕЙ КАРТЫ ===
+  floor(blocks, -64, 63, -64, 63, 'sand');
 
-  // --- ground: desert sand with speckles ---
-  for (let x = -HALF; x < HALF; x++) {
-    for (let z = -HALF; z < HALF; z++) {
-      let t = 'sand';
-      const v = r();
-      if (v < 0.05) t = 'gravel';
-      else if (v < 0.07) t = 'dirt';
-      set(x, 0, z, t);
+  // ============================================================
+  // ВНЕШНИЕ СТЕНЫ КАРТЫ (периметр)
+  // ============================================================
+  wallX(blocks, -64, 63, -64, 1, 5);   // север
+  wallX(blocks, -64, 63, 63, 1, 5);    // юг
+  wallZ(blocks, -64, 63, -64, 1, 5);   // запад
+  wallZ(blocks, -64, 63, 63, 1, 5);    // восток
+
+  // ============================================================
+  // T SPAWN (внизу по центру, X=-20..10, Z=40..60)
+  // ============================================================
+  // Задняя стена T Spawn
+  wallX(blocks, -20, 10, 60, 1, 4);
+  // Боковые стены
+  wallZ(blocks, 40, 60, -20, 1, 4);
+  wallZ(blocks, 40, 60, 10, 1, 4);
+  // Выходы из T Spawn:
+  // - налево (в Tunnels)
+  // - направо (в Long)
+  // - вперёд (в Mid)
+  // Ящики в T Spawn
+  crate(blocks, -15, 45, 2);
+  crate(blocks, 5, 45, 2);
+  crate(blocks, -5, 50, 2);
+
+  // ============================================================
+  // ВЫХОД T SPAWN → MID (центральный проход)
+  // ============================================================
+  // Стены коридора (X=-5..5, Z=20..40)
+  wallZ(blocks, 20, 40, -8, 1, 4);
+  wallZ(blocks, 20, 40, 8, 1, 4);
+
+  // ============================================================
+  // MID (центральная зона, X=-20..20, Z=-10..20)
+  // ============================================================
+  // Левая стена Mid
+  wallZ(blocks, -10, 20, -20, 1, 4);
+  // Правая стена Mid
+  wallZ(blocks, -10, 20, 20, 1, 4);
+
+  // Mid Doors (X=-4..4, Z=5) — проход в центре Mid
+  wallX(blocks, -20, -5, 5, 1, 4);
+  wallX(blocks, 5, 20, 5, 1, 4);
+  // Двери — оставляем проход X=-4..4
+
+  // Xbox (знаменитый ящик в Mid, X=0, Z=10)
+  crate(blocks, -1, 10, 2, 'wood');
+  crate(blocks, -1, 10, 2, 'wood');
+
+  // Ящики в Mid
+  crate(blocks, -15, 0, 2);
+  crate(blocks, 15, 0, 2);
+  crate(blocks, -12, 15, 2);
+  crate(blocks, 12, 15, 2);
+
+  // ============================================================
+  // CT MID / CT SPAWN (сверху по центру, X=-20..30, Z=-50..-10)
+  // ============================================================
+  // Стена перед CT Spawn (с проходами на A и B)
+  wallX(blocks, -30, -10, -20, 1, 4);   // проход на B (слева)
+  wallX(blocks, 20, 30, -20, 1, 4);     // проход на A (справа)
+  // Проход Mid → CT Mid — оставляем X=-10..20
+
+  // Боковые стены CT Spawn
+  wallZ(blocks, -50, -20, -30, 1, 4);
+  wallZ(blocks, -50, -20, 30, 1, 4);
+  // Задняя стена CT Spawn
+  wallX(blocks, -30, 30, -50, 1, 4);
+
+  // Ящики в CT Spawn
+  crate(blocks, -20, -40, 2);
+  crate(blocks, 20, -40, 2);
+
+  // ============================================================
+  // LONG A (длинный коридор справа, X=30..55, Z=0..55)
+  // ============================================================
+  // Внутренняя стена Long (отделяет от Mid)
+  wallZ(blocks, 0, 55, 30, 1, 4);
+  // Внешняя стена Long (периметр)
+  // — уже есть внешняя стена на X=63
+
+  // Long Doors (в конце Long, Z=55)
+  wallX(blocks, 30, 40, 55, 1, 4);
+  wallX(blocks, 50, 55, 55, 1, 4);
+  // Проход X=40..50 — Long Doors открыты
+
+  // Ящики в Long
+  crate(blocks, 35, 30, 2);
+  crate(blocks, 45, 20, 2);
+  crate(blocks, 50, 40, 2);
+  crate(blocks, 35, 45, 2);
+
+  // ============================================================
+  // LONG CORNER → A SITE (переход наверх справа)
+  // ============================================================
+  // Стены поворота
+  wallZ(blocks, 0, 15, 30, 1, 4);
+  wallX(blocks, 30, 55, 0, 1, 4);
+
+  // ============================================================
+  // A SITE (справа сверху, X=30..60, Z=-50..-5)
+  // ============================================================
+  // Западная стена A (отделяет от CT Mid)
+  wallZ(blocks, -50, -5, 30, 1, 5);
+  // Северная стена A
+  wallX(blocks, 30, 60, -50, 1, 5);
+  // Проход A → CT Mid — оставляем открытым
+
+  // === ГЛАВНЫЕ ЯЩИКИ НА A (платформа для бомбы) ===
+  crate(blocks, 40, -30, 2, 'wood');
+  crate(blocks, 42, -30, 2, 'wood');
+  crate(blocks, 44, -30, 2, 'wood');
+  // Второй ряд (повыше — сложенные ящики)
+  for (let x = 40; x <= 45; x++) {
+    for (let z = -30; z <= -29; z++) {
+      addBlock(blocks, x, 3, z, 'wood');
+      addBlock(blocks, x, 4, z, 'wood');
     }
   }
 
-  // --- stone ring road around the temple + gravel lanes to spawns ---
-  for (let x = -HALF; x < HALF; x++) {
-    for (let z = -HALF; z < HALF; z++) {
-      const d = Math.hypot(x + 0.5, z + 0.5);
-      if (d >= 11 && d <= 12.8) set(x, 0, z, 'stone');
+  // Ящики справа на A
+  crate(blocks, 50, -20, 2);
+  crate(blocks, 50, -18, 2);
+
+  // Ящики слева (у Catwalk)
+  crate(blocks, 35, -40, 2);
+  crate(blocks, 37, -40, 2);
+
+  // Бочки на A (красные)
+  crate(blocks, 55, -40, 1, 'wood');
+  crate(blocks, 56, -42, 1, 'wood');
+
+  // ============================================================
+  // CATWALK (мост от Mid к A, X=15..30, Z=-15..-5)
+  // ============================================================
+  wallZ(blocks, -15, -5, 15, 1, 4);
+  wallZ(blocks, -15, -5, 30, 1, 4);
+  // Проход по мосту — X=15..30
+
+  // ============================================================
+  // SHORT (короткий путь от Mid к A)
+  // ============================================================
+  wallZ(blocks, 0, 5, 20, 1, 4);
+  wallZ(blocks, 0, 5, 30, 1, 4);
+
+  // ============================================================
+  // TUNNELS (слева, X=-55..-30, Z=-10..40)
+  // ============================================================
+  // Внешняя стена Tunnels
+  wallZ(blocks, -10, 40, -55, 1, 4);
+  // Внутренняя стена Tunnels (отделяет от Mid)
+  wallZ(blocks, -10, 40, -30, 1, 4);
+  // Проход Tunnels → T Spawn
+  wallX(blocks, -55, -30, 40, 1, 4);
+  // Потолок туннеля (частично)
+  // Ящики в туннелях
+  crate(blocks, -45, 20, 2);
+  crate(blocks, -50, 0, 2);
+
+  // ============================================================
+  // B SITE (слева сверху, X=-60..-30, Z=-50..-5)
+  // ============================================================
+  // Восточная стена B (отделяет от CT Mid)
+  wallZ(blocks, -50, -5, -30, 1, 5);
+  // Северная стена B
+  wallX(blocks, -60, -30, -50, 1, 5);
+  // Проход B → CT Mid — оставляем открытым
+
+  // === ЯЩИКИ НА B ===
+  crate(blocks, -50, -30, 2);
+  crate(blocks, -48, -30, 2);
+  for (let x = -50; x <= -47; x++) {
+    for (let z = -30; z <= -29; z++) {
+      addBlock(blocks, x, 3, z, 'wood');
+      addBlock(blocks, x, 4, z, 'wood');
     }
   }
-  for (let x = 13; x <= 25; x++) for (let z = -1; z <= 1; z++) {
-    set(x, 0, z, 'gravel'); set(-x - 1, 0, z, 'gravel');
-  }
-  for (let z = 13; z <= 27; z++) for (let x = -1; x <= 1; x++) {
-    set(x, 0, z, 'gravel'); set(x, 0, -z - 1, 'gravel');
-  }
+  crate(blocks, -40, -40, 2);
+  crate(blocks, -55, -20, 2);
 
-  // --- border walls (bedrock, 5 high) ---
-  for (let i = -HALF - 1; i <= HALF; i++) {
-    for (let y = 0; y <= 5; y++) {
-      set(i, y, -HALF - 1, 'bedrock');
-      set(i, y, HALF, 'bedrock');
-      set(-HALF - 1, y, i, 'bedrock');
-      set(HALF, y, i, 'bedrock');
+  // Машина на B (упрощённая)
+  for (let x = -58; x <= -52; x++) {
+    for (let z = -35; z <= -30; z++) {
+      addBlock(blocks, x, 1, z, 'stone');
+      addBlock(blocks, x, 2, z, 'stone');
     }
   }
 
-  // --- central step pyramid (climbable from all sides) ---
-  for (let y = 1; y <= 5; y++) {
-    const B = 8 - y; // 15x15 at the base, 7x7 on top
-    for (let x = -B; x <= B; x++)
-      for (let z = -B; z <= B; z++)
-        set(x, y, z, y === 1 ? 'cobble' : (r() < 0.22 ? 'cobble' : 'sand'));
-  }
-  // inner treasure chamber
-  carve(-3, 1, -3, 3, 3, 3);
-  // ground-level corridors through the pyramid (E-W and N-S)
-  carve(-7, 1, -1, 7, 2, 1);
-  carve(-1, 1, -7, 1, 2, 7);
-  // drop shaft from the roof straight into the chamber (one-way!)
-  carve(0, 1, 0, 0, 5, 0);
-  // roof merlons
-  [[-3, -3], [-3, 3], [3, -3], [3, 3], [0, 3], [0, -3], [3, 0], [-3, 0]]
-    .forEach(([x, z]) => { if (x || z) set(x, 6, z, 'cobble'); });
-  // gold-ish "treasure" in the chamber (planks crates + glow of red/blue wool)
-  set(-2, 1, -2, 'planks'); set(2, 1, 2, 'planks'); set(2, 2, 2, 'planks');
-  set(-2, 1, 2, 'redWool'); set(2, 1, -2, 'blueWool');
+  // ============================================================
+  // ПРОХОД CT → B (слева)
+  // ============================================================
+  wallZ(blocks, -30, -20, -30, 1, 4);
+  wallX(blocks, -30, -30, -20, -30, 1, 4);
 
-  // --- ruined colonnade along the ring road ---
-  const pillars = [ // [x, z, height], x>0 mirrored to -x-1
-    [11, 4, 4], [11, -5, 3], [8, 9, 4], [8, -10, 2], [4, 11, 3], [4, -12, 4],
-  ];
-  pillars.forEach(([px, pz, h]) => {
-    [[px, pz], [-px - 1, pz]].forEach(([x, z]) => {
-      box(x, 1, z, x, h, z, 'cobble');
-      if (h >= 4) set(x, h + 1, z, 'leaves'); // overgrown top
-    });
-  });
+  // ============================================================
+  // ПРОХОД CT → A (справа)
+  // ============================================================
+  wallZ(blocks, -30, -20, 30, 1, 4);
+  wallX(blocks, 30, 30, -20, -30, 1, 4);
 
-  // --- watchtowers north & south (neutral, equidistant) ---
-  [[0, 18], [0, -19]].forEach(([tx, tz]) => {
-    const sz = tz > 0 ? 1 : -1;
-    box(tx - 1, 1, tz - 1, tx + 1, 4, tz + 1, 'bricks');
-    box(tx - 2, 5, tz - 2, tx + 2, 5, tz + 2, 'planks');
-    // climbing steps on the far side
-    box(tx, 1, tz + 3 * sz, tx, 1, tz + 3 * sz, 'cobble');
-    box(tx, 1, tz + 2 * sz, tx, 2, tz + 2 * sz, 'cobble');
-    box(tx - 1, 1, tz + 2 * sz, tx - 1, 3, tz + 2 * sz, 'cobble');
-    box(tx - 1, 1, tz + 1 * sz, tx - 1, 4, tz + 1 * sz, 'cobble');
-  });
+  // ============================================================
+  // ДОПОЛНИТЕЛЬНЫЕ УКРЫТИЯ И ДЕКОР
+  // ============================================================
+  // Ящики в разных местах
+  crate(blocks, -25, 25, 2);   // около T Spawn
+  crate(blocks, 25, 25, 2);
+  crate(blocks, 0, -15, 2);    // в CT Mid
+  crate(blocks, 15, -15, 2);
+  crate(blocks, -15, -15, 2);
 
-  // --- palm oases in the four corners ---
-  [[19, 20], [19, -21], [-20, 20], [-20, -21]].forEach(([ox, oz]) => {
-    for (let dx = -3; dx <= 3; dx++)
-      for (let dz = -3; dz <= 3; dz++)
-        if (dx * dx + dz * dz <= 9 && r() < 0.85) set(ox + dx, 0, oz + dz, 'grass');
-    const palm = (px, pz, h) => {
-      box(px, 1, pz, px, h, pz, 'log');
-      set(px + 1, h + 1, pz, 'leaves'); set(px - 1, h + 1, pz, 'leaves');
-      set(px, h + 1, pz + 1, 'leaves'); set(px, h + 1, pz - 1, 'leaves');
-      set(px, h + 2, pz, 'leaves');
-    };
-    palm(ox, oz, 4);
-    palm(ox + 2, oz - 2, 3);
-    set(ox - 2, 1, oz + 1, 'leaves'); // bush
-    set(ox + 1, 1, oz + 2, 'leaves');
-  });
+  // Бочки
+  crate(blocks, 60, -55, 1, 'wood');
+  crate(blocks, -60, 55, 1, 'wood');
+  crate(blocks, 60, 55, 1, 'wood');
+  crate(blocks, -60, -55, 1, 'wood');
 
-  // --- broken ruin walls mid-field (mirrored across x for fairness) ---
-  for (let i = 0; i < 9; i++) {
-    const cx = 6 + Math.floor(r() * 14);
-    const cz = Math.floor(r() * 52) - 26;
-    const len = 3 + Math.floor(r() * 3);
-    const alongX = r() < 0.5;
-    if (cx <= 9 && Math.abs(cz) <= 9) continue;        // keep pyramid clear
-    if (Math.abs(cz) >= 13 && Math.abs(cz) <= 16) continue; // keep spawn shelters clear
-    const heights = Array.from({ length: len }, () => 1 + Math.floor(r() * 3));
-    heights.forEach((h, j) => {
-      const bx = alongX ? cx + j : cx;
-      const bz = alongX ? cz : cz + j;
-      if (Math.abs(bx) > 24 || Math.abs(bz) > 29) return;
-      box(bx, 1, bz, bx, h, bz, 'bricks');
-      box(-bx - 1, 1, bz, -bx - 1, h, bz, 'bricks');
-    });
-  }
-
-  // --- low dunes for cover (mirrored) ---
-  for (let i = 0; i < 12; i++) {
-    const cx = 5 + Math.floor(r() * 18);
-    const cz = Math.floor(r() * 54) - 27;
-    if (Math.hypot(cx, cz) < 11) continue;
-    box(cx, 1, cz, cx + 1, 1, cz + 1, 'sand');
-    box(-cx - 2, 1, cz, -cx - 1, 1, cz + 1, 'sand');
-  }
-
-  // --- team spawn zones ---
-  // wool pads (ground recolor)
-  for (let z = -12; z <= 12; z++) {
-    for (let x = 26; x <= 30; x++) {
-      set(-x, 0, z, 'redWool');
-      set(x, 0, z, 'blueWool');
-    }
-  }
-  // defensive wall in front of each spawn with firing gaps
-  for (let z = -9; z <= 9; z++) {
-    if ((z + 9) % 4 === 3) continue; // gap
-    box(-24, 1, z, -24, 2, z, 'redWool');
-    box(23, 1, z, 23, 2, z, 'blueWool');
-  }
-  // side shelters
-  [[-28, 'redWool'], [27, 'blueWool']].forEach(([bx, wool]) => {
-    box(bx - 2, 1, -16, bx + 2, 3, -16, wool);
-    box(bx - 2, 1, 16, bx + 2, 3, 16, wool);
-  });
-
-  return [...m.values()];
+  return blocks;
 }
