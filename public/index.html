@@ -13,22 +13,11 @@
   body { font-family: 'Inter', -apple-system, sans-serif; color: #e8e8e8; }
   canvas#game { display: block; width: 100%; height: 100%; }
 
-  /* ============ ФОН (Dust 2 стиль) ============ */
-  .bg-dust {
-    background:
-      linear-gradient(180deg, rgba(0,0,0,.75) 0%, rgba(0,0,0,.4) 40%, rgba(0,0,0,.9) 100%),
-      radial-gradient(ellipse at 30% 20%, #d4b88a 0%, #8b6b3e 60%, #2a1f15 100%);
-  }
-
   /* ============ ЭКРАН РЕГИСТРАЦИИ ============ */
   #authScreen {
     position: fixed; inset: 0; z-index: 120;
     display: flex; align-items: center; justify-content: center;
-  }
-  #authScreen::before {
-    content: ''; position: absolute; inset: 0;
-    background: url('https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=2070&auto=format&fit=crop') center/cover;
-    filter: brightness(.3) saturate(1.4) blur(2px);
+    background: radial-gradient(ellipse at center, #1a1410 0%, #0a0a0c 100%);
   }
   #authScreen .authCard {
     position: relative; z-index: 2;
@@ -39,8 +28,8 @@
     box-shadow: 0 20px 60px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.05) inset;
   }
   #authScreen .logo {
-    font-size: 36px; font-weight: 900; letter-spacing: 4px;
-    text-align: center; margin-bottom: 4px;
+    font-size: 32px; font-weight: 900; letter-spacing: 3px;
+    text-align: center; margin-bottom: 6px;
     background: linear-gradient(135deg, #fff 0%, #f0ad4e 100%);
     -webkit-background-clip: text; background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -78,24 +67,14 @@
   .cs-btn:disabled { opacity: .5; cursor: default; transform: none; }
   #authErr { color: #ff5555; font-size: 12px; margin-top: 16px; min-height: 16px; text-align: center; }
 
-  /* ============ ГЛАВНОЕ МЕНЮ (CS2 style) ============ */
+  /* ============ ГЛАВНОЕ МЕНЮ ============ */
   #menu {
     position: fixed; inset: 0; z-index: 100;
     display: none; flex-direction: column;
+    background:
+      linear-gradient(180deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.5) 30%, rgba(0,0,0,.4) 60%, rgba(0,0,0,.95) 100%),
+      radial-gradient(ellipse at 30% 20%, #d4b88a 0%, #8b6b3e 60%, #2a1f15 100%);
   }
-  #menu::before {
-    content: ''; position: absolute; inset: 0;
-    background: url('https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=2070&auto=format&fit=crop') center/cover;
-    filter: brightness(.35) saturate(1.3);
-    z-index: 0;
-  }
-  #menu::after {
-    content: ''; position: absolute; inset: 0;
-    background: linear-gradient(180deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.5) 30%, rgba(0,0,0,.4) 60%, rgba(0,0,0,.95) 100%);
-    z-index: 1;
-  }
-
-  /* Верхняя навигация */
   .cs-topnav {
     position: relative; z-index: 10;
     display: flex; align-items: center;
@@ -116,8 +95,6 @@
     height: 2px; background: #f0ad4e;
     box-shadow: 0 0 10px #f0ad4e;
   }
-
-  /* Правая панель — юзер */
   .cs-userpanel {
     position: absolute; top: 20px; right: 40px;
     z-index: 20; display: flex; align-items: center; gap: 14px;
@@ -144,23 +121,14 @@
     transition: 0.15s;
   }
   .cs-userpanel .logout:hover { background: #ff5555; color: #fff; border-color: #ff5555; }
-
-  /* Центральный контент */
   .cs-center {
     position: relative; z-index: 10;
     flex: 1; display: flex; align-items: center; justify-content: center;
   }
   .cs-character {
     width: 500px; height: 600px;
-    background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.6) 100%);
     display: flex; align-items: flex-end; justify-content: center;
     position: relative;
-  }
-  .cs-character::after {
-    content: ''; position: absolute;
-    bottom: 0; left: 50%; transform: translateX(-50%);
-    width: 300px; height: 40px;
-    background: radial-gradient(ellipse, rgba(240,173,78,.3) 0%, transparent 70%);
   }
   .cs-char-silhouette {
     width: 300px; height: 550px;
@@ -178,16 +146,6 @@
     background: radial-gradient(circle, #5a5a62 0%, #2a2a30 80%);
     border-radius: 50%;
   }
-  .cs-char-silhouette::after {
-    content: ''; position: absolute;
-    top: 130px; right: 20px;
-    width: 180px; height: 30px;
-    background: linear-gradient(90deg, transparent 0%, #2a2a30 30%, #1a1a20 100%);
-    border-radius: 4px;
-    transform: rotate(-15deg);
-  }
-
-  /* Нижняя панель — кнопки */
   .cs-bottompanel {
     position: relative; z-index: 10;
     padding: 0 40px 40px 40px;
@@ -221,9 +179,7 @@
   }
   .cs-playbtn:active { transform: translateY(0); }
   .cs-playbtn:disabled { opacity: .5; cursor: default; transform: none; }
-  .cs-secondary-btns {
-    display: flex; gap: 12px; margin-top: 8px;
-  }
+  .cs-secondary-btns { display: flex; gap: 12px; margin-top: 8px; }
   .cs-secondary-btns button {
     padding: 12px 24px; font-size: 11px; font-weight: 700;
     letter-spacing: 2px; text-transform: uppercase;
@@ -237,10 +193,7 @@
     background: rgba(240,173,78,.15);
     border-color: #f0ad4e; color: #f0ad4e;
   }
-  #menuErr {
-    color: #ff5555; font-size: 12px; min-height: 16px;
-    text-align: center; margin-top: 12px;
-  }
+  #menuErr { color: #ff5555; font-size: 12px; min-height: 16px; text-align: center; margin-top: 12px; }
   #menu .ver {
     position: absolute; left: 40px; bottom: 16px; z-index: 10;
     color: #444; font-size: 10px; letter-spacing: 2px;
@@ -276,7 +229,7 @@
     border-bottom: 1px solid rgba(255,255,255,.05);
   }
   .settingRow:last-child { border-bottom: none; }
-  .settingRow label { color: #ccc; font-size: 13px; font-weight: 500; letter-spacing: .5px; }
+  .settingRow label { color: #ccc; font-size: 13px; font-weight: 500; }
   .settingRow .val {
     color: #f0ad4e; font-size: 13px; font-weight: 700;
     margin-left: 10px; font-family: 'JetBrains Mono', monospace;
@@ -291,7 +244,6 @@
     width: 22px; height: 22px; background: #fff; border-radius: 50%;
     position: absolute; top: 3px; left: 3px;
     transition: 0.2s;
-    box-shadow: 0 2px 6px rgba(0,0,0,.4);
   }
   .toggle.active .knob { left: 27px; }
   input[type="range"] {
@@ -328,7 +280,7 @@
     border-color: #f0ad4e; color: #f0ad4e;
   }
 
-  /* ============ ИГРА (CS2 HUD) ============ */
+  /* ============ ИГРА ============ */
   #teamBanner {
     position: fixed; inset: 0; z-index: 90;
     display: none; align-items: center; justify-content: center;
@@ -343,7 +295,6 @@
     font-size: 13px; color: #ccc; margin-top: 24px;
     letter-spacing: 4px; text-shadow: 2px 2px 0 #000;
   }
-
   #roundWin {
     position: fixed; inset: 0; z-index: 95;
     display: none; align-items: center; justify-content: center;
@@ -352,8 +303,7 @@
   }
   #roundWin .winText {
     font-size: 56px; font-weight: 900; letter-spacing: 10px;
-    text-transform: uppercase;
-    text-shadow: 6px 6px 0 #000;
+    text-transform: uppercase; text-shadow: 6px 6px 0 #000;
   }
   #roundWin .winSub {
     font-size: 14px; color: #aaa; margin-top: 24px;
@@ -363,8 +313,6 @@
   #roundWin.blue .winText { color: #7f9fff; text-shadow: 6px 6px 0 #000, 0 0 40px #7f9fff; }
 
   #hud { position: fixed; inset: 0; z-index: 50; display: none; pointer-events: none; }
-
-  /* Прицел */
   #crosshair {
     position: absolute; left: 50%; top: 50%;
     transform: translate(-50%, -50%); width: 20px; height: 20px;
@@ -375,14 +323,11 @@
     box-shadow: 0 0 2px #000;
   }
   #crosshair::before { left: 9px; top: 0; width: 2px; height: 7px; }
-  #crosshair::before { left: 9px; bottom: 0; width: 2px; height: 7px; }
   #crosshair::after { top: 9px; left: 0; width: 7px; height: 2px; }
-  #crosshair::after { top: 9px; right: 0; width: 7px; height: 2px; }
 
-  /* РАУНД-ТАЙМЕР (сверху центр) */
   #roundTimer {
     position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
-    z-index: 60; display: flex; gap: 0;
+    z-index: 60; display: flex;
     background: rgba(0,0,0,.65);
     border: 1px solid rgba(255,255,255,.1);
     border-radius: 4px;
@@ -406,15 +351,12 @@
   @keyframes pulseTimer { from { opacity: 1; } to { opacity: .4; } }
   #roundTimer .phase { font-size: 9px; color: #f0ad4e; letter-spacing: 3px; margin-top: 1px; font-weight: 600; }
 
-  /* ДЕНЬГИ (слева сверху) */
   #moneyHud {
     position: fixed; top: 20px; left: 20px; z-index: 60;
     font-family: 'JetBrains Mono', monospace;
     font-size: 26px; font-weight: 700; color: #6ab04c;
     text-shadow: 2px 2px 0 #000;
   }
-
-  /* HP + БРОНЯ (слева снизу) */
   #healthPanel {
     position: fixed; left: 24px; bottom: 24px; z-index: 60;
     display: flex; align-items: center; gap: 16px;
@@ -435,10 +377,7 @@
     border-radius: 2px; overflow: hidden;
     border: 1px solid rgba(255,255,255,.1);
   }
-  .barWrap .bar {
-    height: 100%; width: 100%;
-    transition: width .2s;
-  }
+  .barWrap .bar { height: 100%; width: 100%; transition: width .2s; }
   #hpBar { background: linear-gradient(90deg, #4ade80, #22c55e); }
   #armorBar { background: linear-gradient(90deg, #6ab0ff, #3a8ee6); }
   .barLabel {
@@ -446,8 +385,6 @@
     text-transform: uppercase; margin-bottom: 2px;
     display: flex; justify-content: space-between;
   }
-
-  /* ПАТРОНЫ (справа снизу) */
   #ammoPanel {
     position: fixed; right: 24px; bottom: 24px; z-index: 60;
     text-align: right;
@@ -471,8 +408,6 @@
     letter-spacing: 2px; display: none;
     animation: pulseHp .5s infinite alternate;
   }
-
-  /* РАДАР (сверху слева) */
   #radar {
     position: fixed; top: 70px; left: 20px; z-index: 60;
     width: 220px; height: 160px;
@@ -482,13 +417,6 @@
     overflow: hidden; display: none;
   }
   #radar canvas { width: 100%; height: 100%; display: block; }
-  #radar .radarTitle {
-    position: absolute; top: 2px; left: 6px;
-    font-size: 9px; color: #666; letter-spacing: 2px;
-    font-family: 'JetBrains Mono', monospace;
-  }
-
-  /* КИЛЛФИД (справа сверху) */
   #killfeed {
     position: fixed; top: 90px; right: 24px;
     z-index: 60; text-align: right;
@@ -502,12 +430,6 @@
     border-radius: 2px;
     padding: 5px 12px;
     font-size: 11px; color: #fff;
-    font-family: 'Inter', sans-serif;
-    animation: kfSlide .3s ease-out;
-  }
-  @keyframes kfSlide {
-    from { transform: translateX(40px); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
   }
   #killfeed .kfItem.red { border-left-color: #ff5555; }
   #killfeed .kfItem.blue { border-left-color: #7f9fff; }
@@ -516,7 +438,6 @@
   #killfeed .kfItem .weapon { color: #f0ad4e; font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
   #killfeed .kfItem .hs { color: #ffcc00; }
 
-  /* Чат */
   #chat { position: fixed; left: 20px; bottom: 140px; width: 460px; max-width: 45vw; display: flex; flex-direction: column; justify-content: flex-end; z-index: 60; }
   #chatMessages { display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
   #chatMessages div {
@@ -535,8 +456,6 @@
     border: 1px solid #f0ad4e; border-radius: 4px;
     outline: none; pointer-events: auto; font-family: inherit;
   }
-
-  /* ГОЛОС */
   #voiceInd {
     position: fixed; left: 20px; bottom: 100px; z-index: 60;
     display: none; align-items: center; gap: 8px;
@@ -550,7 +469,6 @@
   @keyframes micPulse { from { opacity: .4; } to { opacity: 1; } }
   #voiceInd span { font-size: 11px; color: #aaffaa; letter-spacing: 1px; }
 
-  /* ХИТМАРКЕР */
   #hitmarker {
     position: absolute; left: 50%; top: 50%;
     transform: translate(-50%,-50%) rotate(45deg);
@@ -570,8 +488,6 @@
     background: radial-gradient(ellipse at center, transparent 50%, rgba(255,0,0,.6) 100%);
     pointer-events: none;
   }
-
-  /* ЭКРАН СМЕРТИ */
   #deathScreen {
     position: absolute; inset: 0; display: none;
     flex-direction: column; align-items: center; justify-content: center;
@@ -581,16 +497,8 @@
     font-size: 42px; font-weight: 900; letter-spacing: 8px;
     color: #ff4444; text-shadow: 4px 4px 0 #000, 0 0 40px #ff4444;
   }
-  #deathScreen .by {
-    font-size: 14px; color: #ccc; margin-top: 24px;
-    letter-spacing: 2px;
-  }
-  #deathScreen .cd {
-    font-size: 14px; color: #f0ad4e; margin-top: 30px;
-    letter-spacing: 2px;
-  }
-
-  /* SCOREBOARD */
+  #deathScreen .by { font-size: 14px; color: #ccc; margin-top: 24px; letter-spacing: 2px; }
+  #deathScreen .cd { font-size: 14px; color: #f0ad4e; margin-top: 30px; letter-spacing: 2px; }
   #scoreboard {
     position: absolute; left: 50%; top: 50%;
     transform: translate(-50%,-50%);
@@ -614,8 +522,6 @@
   }
   #scoreboard th { color: #666; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
   #scoreboard td.me { color: #f0ad4e; font-weight: 700; }
-
-  /* ПАУЗА */
   #pauseHint {
     position: absolute; left: 50%; top: 50%;
     transform: translate(-50%,-50%);
@@ -641,11 +547,8 @@
     background: linear-gradient(135deg, #f0ad4e 0%, #e8922c 100%);
     border: none; border-radius: 4px;
   }
-  #pauseHint button:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(240,173,78,.5); }
-
   #respawnFlash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
 
-  /* ============ БОМБА ============ */
   #plantProgress {
     position: fixed; left: 50%; bottom: 180px;
     transform: translateX(-50%);
@@ -674,8 +577,6 @@
     z-index: 80; letter-spacing: 3px;
     font-family: 'JetBrains Mono', monospace;
   }
-
-  /* FPS */
   #fpsCounter {
     position: fixed; top: 12px; right: 200px; z-index: 200;
     color: #44ff44; font-size: 12px;
@@ -684,55 +585,7 @@
     display: none;
   }
 
-  /* ЧИТ-ПАНЕЛЬ */
-  #cheatPanel {
-    position: fixed; top: 260px; right: 24px; z-index: 85;
-    display: none; flex-direction: column; gap: 8px;
-    background: rgba(20,0,0,.92); border: 1px solid #ff2222;
-    border-radius: 6px; padding: 14px 18px;
-    box-shadow: 0 0 25px rgba(255,34,34,.5);
-  }
-  #cheatPanel .title {
-    color: #ff5555; font-size: 12px; text-align: center;
-    margin-bottom: 8px; letter-spacing: 2px; font-weight: 900;
-  }
-  #cheatPanel .cheatRow {
-    display: flex; justify-content: space-between; align-items: center;
-    gap: 15px; font-size: 11px; color: #ccc;
-  }
-  #cheatPanel .cheatRow .key {
-    background: #333; padding: 3px 8px; border-radius: 3px;
-    color: #fff; font-weight: 700; font-family: 'JetBrains Mono', monospace;
-  }
-  #cheatPanel .cheatRow .val {
-    color: #888; font-family: 'JetBrains Mono', monospace; font-weight: 700;
-  }
-  #cheatPanel .cheatRow.active .val { color: #44ff44; }
-  #cheatPanel .hint {
-    color: #888; font-size: 10px; margin-top: 8px;
-    text-align: center; line-height: 1.6;
-  }
-
-  /* МОБИЛЬНОЕ */
-  #mobileControls { position: fixed; inset: 0; z-index: 75; display: none; pointer-events: none; }
-  #mobileControls.active { display: block; }
-  #joystickZone { position: absolute; bottom: 30px; left: 30px; width: 200px; height: 200px; pointer-events: auto; touch-action: none; }
-  #joystickBase { width: 160px; height: 160px; background: rgba(255,255,255,.08); border: 2px solid rgba(240,173,78,.5); border-radius: 50%; position: absolute; bottom: 20px; left: 20px; }
-  #joystickKnob { width: 70px; height: 70px; background: rgba(240,173,78,.6); border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
-  .mobileBtn {
-    width: 80px; height: 80px; border-radius: 50%;
-    background: rgba(240,173,78,.25); border: 2px solid rgba(240,173,78,.6);
-    color: #fff; font-size: 22px; font-weight: 700;
-    cursor: pointer; touch-action: none; position: absolute;
-    pointer-events: auto; display: flex; align-items: center; justify-content: center;
-  }
-  .mobileBtn:active { background: rgba(240,173,78,.6); transform: scale(.95); }
-  #fireBtn { bottom: 110px; right: 40px; width: 100px; height: 100px; background: rgba(235,75,75,.35); border-color: rgba(235,75,75,.8); font-size: 30px; }
-  #reloadBtn { bottom: 40px; right: 160px; }
-  #jumpBtn { bottom: 40px; right: 40px; }
-  #bombBtn { bottom: 130px; right: 160px; font-size: 18px; }
-
-  /* ============ BUY MENU (CS2 style) ============ */
+  /* ============ BUY MENU ============ */
   #buyMenu {
     position: fixed; inset: 0; z-index: 200;
     display: none; align-items: center; justify-content: center;
@@ -761,9 +614,7 @@
     font-size: 22px; color: #6ab04c; font-weight: 700;
     margin-bottom: 28px;
   }
-  #buyMenu .buyGrid {
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
-  }
+  #buyMenu .buyGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
   #buyMenu .buyItem {
     background: rgba(255,255,255,.03);
     border: 1px solid rgba(255,255,255,.1);
@@ -776,22 +627,11 @@
     border-color: #f0ad4e; transform: translateY(-3px);
     box-shadow: 0 8px 20px rgba(240,173,78,.2);
   }
-  #buyMenu .buyItem.disabled {
-    opacity: .3; cursor: not-allowed; filter: grayscale(1);
-  }
-  #buyMenu .buyItem.disabled:hover {
-    transform: none; background: rgba(255,255,255,.03);
-    border-color: rgba(255,255,255,.1); box-shadow: none;
-  }
+  #buyMenu .buyItem.disabled { opacity: .3; cursor: not-allowed; filter: grayscale(1); }
+  #buyMenu .buyItem.disabled:hover { transform: none; background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.1); box-shadow: none; }
   #buyMenu .buyItem .icon { font-size: 40px; margin-bottom: 10px; }
-  #buyMenu .buyItem .name {
-    font-size: 13px; color: #fff; font-weight: 700;
-    margin-bottom: 8px; letter-spacing: 1px;
-  }
-  #buyMenu .buyItem .price {
-    font-size: 14px; color: #6ab04c;
-    font-family: 'JetBrains Mono', monospace; font-weight: 700;
-  }
+  #buyMenu .buyItem .name { font-size: 13px; color: #fff; font-weight: 700; margin-bottom: 8px; letter-spacing: 1px; }
+  #buyMenu .buyItem .price { font-size: 14px; color: #6ab04c; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
   #buyMenu .buyItem .key {
     position: absolute; top: 8px; right: 10px;
     background: rgba(0,0,0,.5);
@@ -805,7 +645,122 @@
     margin-top: 24px; letter-spacing: 3px;
   }
 
-  /* MATCH END */
+  /* ============ ЧИТ-ПАНЕЛЬ ============ */
+  #cheatPanel {
+    position: fixed; top: 260px; right: 24px; z-index: 85;
+    display: none; flex-direction: column; gap: 6px;
+    background: rgba(20,0,0,.92); border: 1px solid #ff2222;
+    border-radius: 6px; padding: 12px 16px;
+    box-shadow: 0 0 25px rgba(255,34,34,.5);
+    max-height: 50vh; overflow-y: auto;
+    width: 180px;
+  }
+  #cheatPanel .title {
+    color: #ff5555; font-size: 11px; text-align: center;
+    margin-bottom: 6px; letter-spacing: 2px; font-weight: 900;
+  }
+  #cheatPanel .cheatRow {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 8px; font-size: 10px; color: #888;
+  }
+  #cheatPanel .cheatRow.active { color: #44ff44; }
+  #cheatPanel .cheatRow .val { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+  #cheatPanel .cheatRow.active .val { color: #44ff44; }
+  #cheatPanel .hint {
+    color: #888; font-size: 9px; margin-top: 6px;
+    text-align: center; line-height: 1.5;
+    border-top: 1px solid rgba(255,34,34,.3);
+    padding-top: 6px;
+  }
+
+  #cheatMenuBtn {
+    position: fixed; top: 12px; left: 12px; z-index: 86;
+    display: none; padding: 8px 16px;
+    background: #ff2222; color: #fff;
+    border: none; border-radius: 4px;
+    font-weight: 900; letter-spacing: 2px;
+    cursor: pointer; font-family: inherit;
+    font-size: 11px;
+    box-shadow: 0 0 15px rgba(255,34,34,.6);
+  }
+  #cheatMenuBtn:hover { background: #ff5555; }
+
+  /* ============ ЧИТ-МЕНЮ ============ */
+  #cheatMenu {
+    position: fixed; inset: 0; z-index: 220;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(20,0,0,.92); backdrop-filter: blur(8px);
+  }
+  #cheatMenu.active { display: flex; }
+  #cheatMenu .cheatBox {
+    width: 720px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+    background: linear-gradient(180deg, rgba(30,0,0,.98) 0%, rgba(15,0,0,.98) 100%);
+    border: 2px solid #ff2222; border-radius: 8px;
+    padding: 28px 32px;
+    box-shadow: 0 0 60px rgba(255,34,34,.5);
+  }
+  #cheatMenu .cheatTitle {
+    font-size: 22px; font-weight: 900; letter-spacing: 4px;
+    color: #ff5555; text-align: center; margin-bottom: 6px;
+    text-shadow: 0 0 20px #ff2222;
+  }
+  #cheatMenu .cheatSub {
+    font-size: 11px; color: #888; text-align: center;
+    letter-spacing: 2px; margin-bottom: 24px;
+  }
+  #cheatMenu .cheatGrid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  }
+  #cheatMenu .cheatItem {
+    display: flex; justify-content: space-between; align-items: center;
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 4px; padding: 12px 14px;
+    cursor: pointer; transition: 0.15s;
+    font-size: 12px; color: #ccc;
+  }
+  #cheatMenu .cheatItem:hover { background: rgba(255,50,50,.15); border-color: #ff5555; }
+  #cheatMenu .cheatItem.active {
+    background: rgba(50,255,50,.1); border-color: #44ff44; color: #44ff44;
+  }
+  #cheatMenu .cheatItem .key {
+    background: rgba(0,0,0,.4); border: 1px solid rgba(255,255,255,.2);
+    border-radius: 3px; padding: 1px 6px; font-size: 10px;
+    font-family: 'JetBrains Mono', monospace; color: #aaa;
+  }
+  #cheatMenu .cheatItem .val {
+    font-family: 'JetBrains Mono', monospace; font-weight: 700;
+    color: #888; font-size: 11px;
+  }
+  #cheatMenu .cheatItem.active .val { color: #44ff44; }
+  #cheatMenu .cheatCloseBtn {
+    width: 100%; margin-top: 20px; padding: 12px 0;
+    font-size: 13px; font-weight: 700; letter-spacing: 3px;
+    text-transform: uppercase; cursor: pointer; font-family: inherit;
+    background: #ff2222; color: #fff; border: none; border-radius: 4px;
+  }
+  #cheatMenu .cheatCloseBtn:hover { background: #ff5555; }
+
+  /* ============ МОБИЛЬНОЕ ============ */
+  #mobileControls { position: fixed; inset: 0; z-index: 75; display: none; pointer-events: none; }
+  #mobileControls.active { display: block; }
+  #joystickZone { position: absolute; bottom: 30px; left: 30px; width: 200px; height: 200px; pointer-events: auto; touch-action: none; }
+  #joystickBase { width: 160px; height: 160px; background: rgba(255,255,255,.08); border: 2px solid rgba(240,173,78,.5); border-radius: 50%; position: absolute; bottom: 20px; left: 20px; }
+  #joystickKnob { width: 70px; height: 70px; background: rgba(240,173,78,.6); border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+  .mobileBtn {
+    width: 80px; height: 80px; border-radius: 50%;
+    background: rgba(240,173,78,.25); border: 2px solid rgba(240,173,78,.6);
+    color: #fff; font-size: 22px; font-weight: 700;
+    cursor: pointer; touch-action: none; position: absolute;
+    pointer-events: auto; display: flex; align-items: center; justify-content: center;
+  }
+  .mobileBtn:active { background: rgba(240,173,78,.6); transform: scale(.95); }
+  #fireBtn { bottom: 110px; right: 40px; width: 100px; height: 100px; background: rgba(235,75,75,.35); border-color: rgba(235,75,75,.8); font-size: 30px; }
+  #reloadBtn { bottom: 40px; right: 160px; }
+  #jumpBtn { bottom: 40px; right: 40px; }
+  #bombBtn { bottom: 130px; right: 160px; font-size: 18px; }
+
+  /* ============ MATCH END ============ */
   #matchEndScreen {
     position: fixed; inset: 0; z-index: 250;
     display: none; align-items: center; justify-content: center;
@@ -831,7 +786,7 @@
 
   @media (max-width: 700px) {
     #authScreen .authCard { width: 92vw; padding: 30px 24px; }
-    #authScreen .logo { font-size: 28px; }
+    #authScreen .logo { font-size: 24px; }
     .cs-topnav { gap: 20px; padding: 16px 20px 0 20px; }
     .cs-nav-item { font-size: 11px; letter-spacing: 2px; }
     .cs-userpanel { top: 70px; right: 20px; padding: 8px 12px; }
@@ -850,6 +805,7 @@
     #radar { width: 150px; height: 110px; }
     #killfeed { top: 130px; }
     #buyMenu .buyGrid { grid-template-columns: repeat(2, 1fr); }
+    #cheatMenu .cheatGrid { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
 </head>
@@ -868,7 +824,7 @@
     </div>
   </div>
 
-  <!-- ============ ГЛАВНОЕ МЕНЮ (CS2 style) ============ -->
+  <!-- ============ ГЛАВНОЕ МЕНЮ ============ -->
   <div id="menu">
     <div class="cs-topnav">
       <div class="cs-nav-item active">ИГРАТЬ</div>
@@ -876,7 +832,6 @@
       <div class="cs-nav-item">МАГАЗИН</div>
       <div class="cs-nav-item">НОВОСТИ</div>
     </div>
-
     <div class="cs-userpanel">
       <div class="avatar" id="userAvatar">?</div>
       <div class="info">
@@ -885,13 +840,11 @@
       </div>
       <button class="logout" id="logoutBtn">Выход</button>
     </div>
-
     <div class="cs-center">
       <div class="cs-character">
         <div class="cs-char-silhouette"></div>
       </div>
     </div>
-
     <div class="cs-bottompanel">
       <div class="cs-nick">
         <span class="label">ТВОЙ НИК</span>
@@ -904,8 +857,7 @@
       </div>
       <div id="menuErr"></div>
     </div>
-
-    <div class="ver">COUNTER-STRIKE 2 · Web Edition v3.0</div>
+    <div class="ver">COUNTER-STRIKE 2 · Web Edition v3.5</div>
   </div>
 
   <!-- ============ НАСТРОЙКИ ============ -->
@@ -913,7 +865,6 @@
     <div class="settingsPanel">
       <div class="title">Настройки</div>
       <div class="subtitle">Управление · Графика · Звук</div>
-
       <div class="settingRow">
         <label>📱 Мобильное управление</label>
         <div class="toggle" id="toggleMobile"><div class="knob"></div></div>
@@ -942,7 +893,6 @@
           <option value="high">Высокое</option>
         </select>
       </div>
-
       <div class="settingsBtns">
         <button id="settingsBack">Назад</button>
       </div>
@@ -954,7 +904,6 @@
     <div class="big" id="teamBannerText"></div>
     <div class="small">Кликни, чтобы захватить мышь</div>
   </div>
-
   <div id="roundWin">
     <div class="winText" id="roundWinText"></div>
     <div class="winSub" id="roundWinSub"></div>
@@ -964,7 +913,6 @@
   <div id="hud">
     <div id="fpsCounter">FPS: 60</div>
 
-    <!-- Раунд-таймер (сверху центр) -->
     <div id="roundTimer">
       <div class="scoreSide red" id="matchRed">0</div>
       <div class="timeCenter">
@@ -974,10 +922,8 @@
       <div class="scoreSide blue" id="matchBlue">0</div>
     </div>
 
-    <!-- Деньги -->
     <div id="moneyHud">$800</div>
 
-    <!-- HP + Броня -->
     <div id="healthPanel">
       <div class="hpNum" id="hpNum">100</div>
       <div class="bars">
@@ -992,7 +938,6 @@
       </div>
     </div>
 
-    <!-- Патроны -->
     <div id="ammoPanel">
       <div class="ammoNums">
         <span class="cur" id="ammoCur">30</span>
@@ -1003,38 +948,29 @@
       <div class="reload" id="reloadLbl">ПЕРЕЗАРЯДКА...</div>
     </div>
 
-    <!-- Радар -->
     <div id="radar">
-      <span class="radarTitle">DE_DUST2</span>
       <canvas id="radarCanvas" width="440" height="320"></canvas>
     </div>
 
-    <!-- Киллфид -->
     <div id="killfeed"></div>
-
-    <!-- Прицел -->
     <div id="crosshair"></div>
     <div id="hitmarker"></div>
     <div id="dmgVignette"></div>
 
-    <!-- Бомба -->
     <div id="plantProgress">
       <div id="plantProgressLabel">ЗАКЛАДКА БОМБЫ 0%</div>
       <div id="plantProgressBar"><div id="plantProgressFill"></div></div>
     </div>
     <div id="bombTimer">💣 40.0с</div>
 
-    <!-- Смерть -->
     <div id="deathScreen">
       <div class="t">ВЫ ПОГИБЛИ</div>
       <div class="by" id="deathBy"></div>
       <div class="cd" id="deathCd"></div>
     </div>
 
-    <!-- Scoreboard -->
     <div id="scoreboard"></div>
 
-    <!-- Пауза -->
     <div id="pauseHint">
       <div class="t">ПАУЗА</div>
       <div class="c">
@@ -1047,7 +983,6 @@
 
     <div id="respawnFlash"></div>
 
-    <!-- Чат -->
     <div id="chat">
       <div id="chatMessages"></div>
       <input id="chatInput" maxlength="120" placeholder="Сообщение..." autocomplete="off">
@@ -1055,7 +990,6 @@
 
     <div id="voiceInd"><div class="dot"></div><span>МИКРОФОН ВКЛЮЧЁН</span></div>
 
-    <!-- Мобильное -->
     <div id="mobileControls">
       <div id="joystickZone">
         <div id="joystickBase"><div id="joystickKnob"></div></div>
@@ -1066,32 +1000,52 @@
       <button class="mobileBtn" id="bombBtn">💣</button>
     </div>
 
-    <!-- Чит-панель -->
+    <!-- ЧИТ-ПАНЕЛЬ -->
     <div id="cheatPanel">
-      <div class="title">ЧИТ-ПАНЕЛЬ · MOROZ</div>
-      <div class="cheatRow" id="cheatAim">
-        <span>🎯 Aimbot</span>
-        <span class="key">X</span>
-        <span class="val" id="cheatAimVal">OFF</span>
+      <div class="title">🔥 MOROZ</div>
+      <div id="cheatPanelList"></div>
+      <div class="hint">ПРАВЫЙ CTRL — меню</div>
+    </div>
+
+    <!-- Кнопка чит-меню -->
+    <button id="cheatMenuBtn">🔥 ЧИТЫ</button>
+
+    <!-- ЧИТ-МЕНЮ -->
+    <div id="cheatMenu">
+      <div class="cheatBox">
+        <div class="cheatTitle">🔥 ЧИТ-МЕНЮ · MOROZ</div>
+        <div class="cheatSub">Правый Ctrl — открыть · ESC — закрыть</div>
+        <div class="cheatGrid">
+          <div class="cheatItem" data-cheat="aimbot"><span>🎯 Aimbot</span><span class="key">X</span><span class="val">OFF</span></div>
+          <div class="cheatItem" data-cheat="wallhack"><span>👁 Wallhack</span><span class="key">Z</span><span class="val">OFF</span></div>
+          <div class="cheatItem" data-cheat="chams"><span>🔴 Chams</span><span class="key">J</span><span class="val">OFF</span></div>
+          <div class="cheatItem" data-cheat="speedhack"><span>⚡ Speedhack</span><span class="key">C</span><span class="val">OFF</span></div>
+          <div class="cheatItem" data-cheat="noclip"><span>👻 NoClip</span><span class="key">N</span><span class="val">OFF</span></div>
+          <div class="cheatItem" data-cheat="infiniteHp"><span>❤ InfHP</span><span class="key">H</span><span class="val">OFF</span></div>
+          <div class="cheatItem" data-cheat="infiniteAmmo"><span>🔫 InfAmmo</span><span class="key">U</span><span class="val">OFF</span></div>
+          <div class="cheatItem" data-cheat="rapidFire"><span>💥 RapidFire</span><span class="key">I</span><span class="val">OFF</span></div>
+          <div class="cheatItem" data-cheat="autoHeadshot"><span>🎯 AutoHS</span><span class="key">P</span><span class="val">OFF</span></div>
+          <div class="cheatItem" data-cheat="oneShot"><span>☠ OneShot</span><span class="key">K</span><span class="val">OFF</span></div>
+          <div class="cheatItem" data-cheat="fullBright"><span>💡 FullBright</span><span class="key">L</span><span class="val">OFF</span></div>
+          <div class="cheatItem" data-cheat="freeBuy"><span>💰 FreeBuy</span><span class="key">O</span><span class="val">OFF</span></div>
+          <div class="cheatItem" data-cheat="instantPlant"><span>💣 FastPlant</span><span class="key">G</span><span class="val">OFF</span></div>
+          <div class="cheatItem" data-cheat="instantDefuse"><span>🔧 FastDefuse</span><span class="key">F</span><span class="val">OFF</span></div>
+          <div class="cheatItem" data-cheat="teleport"><span>⚡ Teleport</span><span class="key">Y</span><span class="val">ACT</span></div>
+        </div>
+        <button id="cheatMenuClose" class="cheatCloseBtn">ЗАКРЫТЬ</button>
       </div>
-      <div class="cheatRow" id="cheatWall">
-        <span>👁 Wallhack</span>
-        <span class="key">Z</span>
-        <span class="val" id="cheatWallVal">OFF</span>
-      </div>
-      <div class="hint">X автонаведение<br>Z видеть врагов сквозь стены</div>
     </div>
 
     <!-- BUY MENU -->
     <div id="buyMenu">
       <div class="buyBox">
         <div class="buyTitle">Магазин</div>
-        <div class="buySub">Фаза закупки · <span id="buyTimer">15</span>с</div>
+        <div class="buySub">Фаза закупки</div>
         <div class="buyMoney">$<span id="buyMoneyVal">800</span></div>
         <div class="buyGrid">
           <div class="buyItem" data-item="rifle">
             <div class="icon">🔫</div>
-            <div class="name">AK-47 / M4A4</div>
+            <div class="name">AK-47</div>
             <div class="price">$2700</div>
             <div class="key">1</div>
           </div>
@@ -1109,13 +1063,13 @@
           </div>
           <div class="buyItem" data-item="deagle">
             <div class="icon">🔫</div>
-            <div class="name">Desert Eagle</div>
+            <div class="name">Deagle</div>
             <div class="price">$700</div>
             <div class="key">4</div>
           </div>
           <div class="buyItem" data-item="armor">
             <div class="icon">🛡</div>
-            <div class="name">Броня + шлем</div>
+            <div class="name">Броня</div>
             <div class="price">$1000</div>
             <div class="key">5</div>
           </div>
@@ -1126,7 +1080,7 @@
             <div class="key">6</div>
           </div>
         </div>
-        <div class="buyHint">B ЗАКРЫТЬ · 1-6 КУПИТЬ</div>
+        <div class="buyHint">B — ЗАКРЫТЬ · 1-6 — КУПИТЬ</div>
       </div>
     </div>
 
