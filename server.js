@@ -14,7 +14,6 @@ const MIME = {
 };
 
 const MOROZ_PASSWORD = 'мороз 123';
-
 function isMoroz(name) {
   const n = name.toLowerCase();
   return n === 'moroz' || n === 'мороз';
@@ -29,12 +28,16 @@ const MAX_MONEY = 16000;
 
 const PRICES = {
   rifle: 2700, shotgun: 1200, sniper: 4750, deagle: 700,
-  armor: 1000, he: 300,
+  armor: 1000, he: 300, flash: 200, smoke: 300,
 };
 
 const ROUND_TIME = 115000;
 const BUY_TIME = 15000;
 const MATCH_SCORE = 16;
+
+// ============ РЕЖИМЫ ============
+// 'classic' — обычный, 'arena' — 1v1
+let gameMode = 'classic';
 
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
@@ -62,7 +65,6 @@ const BOMB_PLANT_DURATION = 3000;
 const BOMB_DEFUSE_DURATION = 5000;
 const BOMB_RADIUS = 3;
 
-// ============ РАУНДЫ ============
 let roundActive = false;
 let roundStartTime = 0;
 let roundEndTime = 0;
@@ -70,8 +72,22 @@ let matchScore = { red: 0, blue: 0 };
 let buyPhase = true;
 let roundEnded = false;
 
+// ============ ГРАНАТЫ ============
+const grenades = []; // { x, y, z, type, throwTime, fuseTime, owner, team }
+
+const GRENADE_TYPES = {
+  he:    { fuse: 2000, radius: 5, damage: 100 },
+  flash: { fuse: 1800, radius: 12, duration: 3000 },
+  smoke: { fuse: 1500, radius: 6, duration: 15000 },
+};
+
+// ============ SPAWN ============
 const SPAWN_Z = [-10, -5, 0, 5, 10];
 function spawnPoint(team) {
+  if (gameMode === 'arena') {
+    // 1v1: две точки напротив друг друга
+    return team === 'red' ? { x: -20, y: 1.05, z: 0 } : { x: 20, y: 1.05, z: 0 };
+  }
   const x = team === 'red' ? -28 : 28;
   const z = SPAWN_Z[Math.floor(Math.random() * SPAWN_Z.length)] + (Math.random() * 2 - 1);
   return { x, y: 1.05, z };
@@ -103,17 +119,19 @@ function publicInfo(p) {
     id: p.id, name: p.name, team: p.team, hp: p.hp, armor: p.armor,
     alive: p.alive, kills: p.kills, deaths: p.deaths,
     pos: p.pos, ry: p.ry, rx: p.rx, money: p.money, weapon: p.weapon,
+    flashing: p.flashing || 0,
   };
 }
 
-// ============ НАЧАЛО РАУНДА ============
+// ============ РАУНД ============
 function startRound() {
-  console.log('🎬 НАЧАЛО РАУНДА');
+  console.log('🎬 НАЧАЛО РАУНДА (' + gameMode + ')');
   buyPhase = true;
   roundActive = true;
   roundEnded = false;
   roundStartTime = Date.now();
   activeBomb = null;
+  grenades.length = 0;
 
   for (const p of players.values()) {
     p.hp = 100;
@@ -122,42 +140,42 @@ function startRound() {
     p.pos = spawnPoint(p.team);
     p.planting = null;
     p.defusing = null;
-    p.weapons = { rifle: false, shotgun: false, sniper: false, deagle: false };
-    p.weapon = 'rifle';
+    p.flashing = 0;
+    if (gameMode === 'arena') {
+      // В арене бесплатно даём AK
+      p.weapons = { rifle: true, shotgun: false, sniper: false, deagle: false };
+      p.weapon = 'rifle';
+      p.money = 0;
+    } else {
+      p.weapons = { rifle: false, shotgun: false, sniper: false, deagle: false };
+      p.weapon = 'rifle';
+    }
     broadcast({ t: 'respawn', id: p.id, pos: p.pos, hp: 100, armor: 0 });
   }
 
   broadcast({ t: 'roundStart', matchScore, roundTime: ROUND_TIME, buyTime: BUY_TIME });
 
-  setTimeout(() => {
-    if (roundActive) buyPhase = false;
-  }, BUY_TIME);
-
+  setTimeout(() => { if (roundActive) buyPhase = false; }, BUY_TIME);
   roundEndTime = Date.now() + ROUND_TIME;
-  setTimeout(() => {
-    if (roundActive && !roundEnded) endRound('blue', 'time');
-  }, ROUND_TIME);
+  setTimeout(() => { if (roundActive && !roundEnded) endRound('blue', 'time'); }, ROUND_TIME);
 }
 
 function endRound(winnerTeam, reason) {
   if (!roundActive || roundEnded) return;
   roundEnded = true;
   roundActive = false;
-  console.log(`🏁 РАУНД ОКОНЧЕН. Победитель: ${winnerTeam || 'никто'} (${reason})`);
+  console.log(`🏁 РАУНД ОКОНЧЕН. Победитель: ${winnerTeam} (${reason})`);
 
-  if (winnerTeam === 'red' || winnerTeam === 'blue') {
-    matchScore[winnerTeam]++;
-  }
-
+  if (winnerTeam === 'red' || winnerTeam === 'blue') matchScore[winnerTeam]++;
   for (const p of players.values()) {
     if (p.team === winnerTeam) p.money = Math.min(MAX_MONEY, p.money + ROUND_WIN_REWARD);
     else p.money = Math.min(MAX_MONEY, p.money + ROUND_LOSS_REWARD);
   }
-
   broadcast({ t: 'roundEnd', winner: winnerTeam, reason, matchScore });
 
-  if (matchScore.red >= MATCH_SCORE || matchScore.blue >= MATCH_SCORE) {
-    const champ = matchScore.red >= MATCH_SCORE ? 'red' : 'blue';
+  const scoreTarget = gameMode === 'arena' ? 5 : MATCH_SCORE;
+  if (matchScore.red >= scoreTarget || matchScore.blue >= scoreTarget) {
+    const champ = matchScore.red >= scoreTarget ? 'red' : 'blue';
     broadcast({ t: 'matchEnd', winner: champ, matchScore });
     console.log(`🏆 МАТЧ ОКОНЧЕН. Победитель: ${champ}`);
     setTimeout(() => {
@@ -168,10 +186,7 @@ function endRound(winnerTeam, reason) {
     }, 8000);
     return;
   }
-
-  setTimeout(() => {
-    if (players.size > 0) startRound();
-  }, 5000);
+  setTimeout(() => { if (players.size > 0) startRound(); }, 5000);
 }
 
 // ============ ВЗРЫВ БОМБЫ ============
@@ -181,7 +196,6 @@ function startBombTimer() {
     if (!activeBomb) return;
     broadcast({ t: 'bombExploded', bomb: activeBomb });
     console.log('💥 БОМБА ВЗОРВАЛАСЬ!');
-
     for (const p of players.values()) {
       if (!p.alive) continue;
       const dx = p.pos.x - activeBomb.x;
@@ -197,7 +211,7 @@ function startBombTimer() {
   }, BOMB_FUSE);
 }
 
-// ============ УРОН С БРОНЁЙ ============
+// ============ УРОН ============
 function applyDamage(target, dmg, attackerId, isHead) {
   if (!target.alive) return;
   let finalDmg = dmg;
@@ -208,9 +222,7 @@ function applyDamage(target, dmg, attackerId, isHead) {
   }
   target.hp -= finalDmg;
   if (target.hp <= 0) {
-    target.hp = 0;
-    target.alive = false;
-    target.deaths++;
+    target.hp = 0; target.alive = false; target.deaths++;
     const killer = players.get(attackerId);
     if (killer && killer.id !== target.id) {
       killer.kills++;
@@ -230,10 +242,69 @@ function applyDamage(target, dmg, attackerId, isHead) {
   }
 }
 
-// ============ СТАРТ РАУНДА ============
-setTimeout(() => {
-  if (players.size > 0) startRound();
-}, 1500);
+// ============ ГРАНАТЫ ============
+function updateGrenades() {
+  const now = Date.now();
+  for (let i = grenades.length - 1; i >= 0; i--) {
+    const g = grenades[i];
+    if (now < g.explodeAt) continue;
+
+    // Взрыв
+    const cfg = GRENADE_TYPES[g.type];
+    if (g.type === 'he') {
+      // Урон
+      for (const p of players.values()) {
+        if (!p.alive) continue;
+        const dx = p.pos.x - g.x;
+        const dy = (p.pos.y + 1) - g.y;
+        const dz = p.pos.z - g.z;
+        const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        if (dist < cfg.radius) {
+          const dmg = Math.max(0, Math.round(cfg.damage * (1 - dist/cfg.radius)));
+          if (p.team === g.team && p.id !== g.owner) {
+            // Тимкилл
+            applyDamage(p, dmg, g.owner, false);
+          } else {
+            applyDamage(p, dmg, g.owner, false);
+          }
+        }
+      }
+      broadcast({ t: 'grenadeExplode', x: g.x, y: g.y, z: g.z, type: 'he' });
+    } else if (g.type === 'flash') {
+      // Ослепление
+      for (const p of players.values()) {
+        if (!p.alive) continue;
+        const dx = p.pos.x - g.x;
+        const dy = (p.pos.y + 1) - g.y;
+        const dz = p.pos.z - g.z;
+        const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        if (dist < cfg.radius) {
+          // Проверка на взгляд в сторону вспышки
+          const toFlash = Math.atan2(-(g.x - p.pos.x), -(g.z - p.pos.z));
+          let angleDiff = Math.abs(p.ry - toFlash);
+          angleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+          if (angleDiff < Math.PI / 2) {
+            const intensity = Math.max(0, 1 - dist/cfg.radius) * (1 - angleDiff / (Math.PI/2));
+            p.flashing = Math.max(p.flashing, Math.round(intensity * cfg.duration));
+            send(p, { t: 'flash', duration: p.flashing });
+          }
+        }
+      }
+      broadcast({ t: 'grenadeExplode', x: g.x, y: g.y, z: g.z, type: 'flash' });
+    } else if (g.type === 'smoke') {
+      broadcast({ t: 'smokeStart', x: g.x, y: g.y, z: g.z, duration: cfg.duration });
+      // Дым живёт cfg.duration
+      setTimeout(() => {
+        broadcast({ t: 'smokeEnd', x: g.x, y: g.y, z: g.z });
+      }, cfg.duration);
+    }
+    grenades.splice(i, 1);
+  }
+}
+setInterval(updateGrenades, 100);
+
+// ============ СТАРТ ============
+setTimeout(() => { if (players.size > 0) startRound(); }, 1500);
 
 wss.on('connection', (ws) => {
   let me = null;
@@ -250,24 +321,15 @@ wss.on('connection', (ws) => {
       const isMorozPlayer = isMoroz(rawName);
 
       if (isMorozPlayer) {
-        if (pass !== MOROZ_PASSWORD) {
-          send(ws, { t: 'authFailed', reason: 'Для moroz пароль: "мороз 123"' });
-          ws.close();
-          return;
-        }
+        if (pass !== MOROZ_PASSWORD) { send(ws, { t: 'authFailed', reason: 'Для moroz пароль: "мороз 123"' }); ws.close(); return; }
       } else {
-        if (pass.length < 3) {
-          send(ws, { t: 'authFailed', reason: 'Пароль минимум 3 символа!' });
-          ws.close();
-          return;
-        }
+        if (pass.length < 3) { send(ws, { t: 'authFailed', reason: 'Пароль минимум 3 символа!' }); ws.close(); return; }
       }
 
-      const name = rawName;
       const team = pickTeam();
       const pos = spawnPoint(team);
       me = {
-        id: nextId++, ws, name, team,
+        id: nextId++, ws, name: rawName, team,
         hp: 100, armor: 0, alive: true, kills: 0, deaths: 0,
         money: START_MONEY,
         pos, ry: team === 'red' ? -Math.PI / 2 : Math.PI / 2, rx: 0,
@@ -275,7 +337,8 @@ wss.on('connection', (ws) => {
         planting: null, defusing: null,
         weapon: 'rifle',
         weapons: { rifle: false, shotgun: false, sniper: false, deagle: false },
-        hasBomb: team === 'red',
+        grenades: { he: 1, flash: 1, smoke: 1 }, // стартовые
+        flashing: 0,
         cheater: isMorozPlayer,
       };
       players.set(me.id, me);
@@ -283,15 +346,11 @@ wss.on('connection', (ws) => {
         t: 'welcome', id: me.id, team, pos, ry: me.ry,
         players: [...players.values()].filter(p => p.id !== me.id).map(publicInfo),
         placed, destroyed, matchScore, money: me.money, armor: me.armor,
-        cheater: isMorozPlayer,
-        roundActive, buyPhase,
+        cheater: isMorozPlayer, roundActive, buyPhase, gameMode,
       });
       broadcast({ t: 'join', p: publicInfo(me) }, me.id);
-      console.log(`+ ${name} joined team ${team}${isMorozPlayer ? ' [MOROZ]' : ''} (${players.size} online)`);
-
-      if (!roundActive && players.size >= 1) {
-        startRound();
-      }
+      console.log(`+ ${me.name} joined team ${team}${isMorozPlayer ? ' [MOROZ]' : ''} (${players.size} online)`);
+      if (!roundActive && players.size >= 1) startRound();
       return;
     }
     if (!me) return;
@@ -301,17 +360,17 @@ wss.on('connection', (ws) => {
         if (!me.alive) break;
         if (me.planting) {
           if (Math.abs(me.pos.x - msg.pos.x) > 0.3 || Math.abs(me.pos.z - msg.pos.z) > 0.3) {
-            me.planting = null;
-            send(me, { t: 'plantCancelled' });
+            me.planting = null; send(me, { t: 'plantCancelled' });
           }
         }
         if (me.defusing) {
           if (Math.abs(me.pos.x - msg.pos.x) > 0.3 || Math.abs(me.pos.z - msg.pos.z) > 0.3) {
-            me.defusing = null;
-            send(me, { t: 'defuseCancelled' });
+            me.defusing = null; send(me, { t: 'defuseCancelled' });
           }
         }
         me.pos = msg.pos; me.ry = msg.ry; me.rx = msg.rx; me.anim = msg.anim;
+        // Обновляем ослепление
+        if (me.flashing > 0) me.flashing = Math.max(0, me.flashing - 50);
         break;
       }
       case 'shoot':
@@ -324,11 +383,9 @@ wss.on('connection', (ws) => {
         const dx = target.pos.x - me.pos.x;
         const dz = target.pos.z - me.pos.z;
         if (dx*dx + dz*dz > 200*200) break;
-
         let baseDmg = msg.dmg | 0;
         if (msg.head) baseDmg *= 2;
         else if (msg.legs) baseDmg = Math.round(baseDmg * 0.75);
-
         applyDamage(target, baseDmg, me.id, msg.head);
         send(me, { t: 'hitconfirm', target: target.id, dmg: baseDmg, head: !!msg.head });
         break;
@@ -359,11 +416,7 @@ wss.on('connection', (ws) => {
         if (destroyedSet.has(key)) break;
         const pi = placed.findIndex(b => b.x === x && b.y === y && b.z === z);
         if (pi >= 0) placed.splice(pi, 1);
-        else {
-          if (destroyed.length > 8000) break;
-          destroyedSet.add(key);
-          destroyed.push({ x, y, z });
-        }
+        else { if (destroyed.length > 8000) break; destroyedSet.add(key); destroyed.push({ x, y, z }); }
         broadcast({ t: 'destroy', x, y, z });
         break;
       }
@@ -381,16 +434,50 @@ wss.on('connection', (ws) => {
         const price = PRICES[item];
         if (!price) { send(me, { t: 'buyError', text: 'Неизвестный предмет' }); break; }
         if (me.money < price) { send(me, { t: 'buyError', text: 'Недостаточно денег!' }); break; }
-        if (me.weapons[item]) { send(me, { t: 'buyError', text: 'Уже куплено' }); break; }
-        me.money -= price;
-        if (item === 'armor') {
+        if (item === 'he' || item === 'flash' || item === 'smoke') {
+          if (me.grenades[item] >= 1) { send(me, { t: 'buyError', text: 'Граната уже куплена' }); break; }
+          me.money -= price;
+          me.grenades[item] = 1;
+        } else if (item === 'armor') {
+          if (me.armor > 0) { send(me, { t: 'buyError', text: 'Броня уже куплена' }); break; }
+          me.money -= price;
           me.armor = 100;
         } else {
+          if (me.weapons[item]) { send(me, { t: 'buyError', text: 'Уже куплено' }); break; }
+          me.money -= price;
           me.weapons[item] = true;
           me.weapon = item;
         }
-        send(me, { t: 'bought', item, money: me.money, armor: me.armor, weapons: me.weapons });
-        console.log(`🛒 ${me.name} купил ${item} за $${price}`);
+        send(me, { t: 'bought', item, money: me.money, armor: me.armor, weapons: me.weapons, grenades: me.grenades });
+        break;
+      }
+
+      // ============ ГРАНАТЫ — БРОСОК ============
+      case 'throwGrenade': {
+        if (!me.alive) break;
+        const type = msg.type;
+        if (!me.grenades[type] || me.grenades[type] <= 0) { send(me, { t: 'bombError', text: 'Нет гранат' }); break; }
+        me.grenades[type]--;
+        const g = {
+          x: msg.x, y: msg.y, z: msg.z,
+          vx: msg.vx, vy: msg.vy, vz: msg.vz,
+          type, owner: me.id, team: me.team,
+          explodeAt: Date.now() + GRENADE_TYPES[type].fuse,
+        };
+        grenades.push(g);
+        send(me, { t: 'grenadesUpdate', grenades: me.grenades });
+        broadcast({ t: 'grenadeThrown', id: me.id, type, from: { x: g.x, y: g.y, z: g.z }, vel: { x: g.vx, y: g.vy, z: g.vz } }, me.id);
+        break;
+      }
+
+      // ============ СМЕНА РЕЖИМА ============
+      case 'setMode': {
+        if (!me.cheater) break; // Только moroz
+        gameMode = msg.mode === 'arena' ? 'arena' : 'classic';
+        matchScore = { red: 0, blue: 0 };
+        broadcast({ t: 'modeChanged', mode: gameMode });
+        console.log(`🎮 Режим: ${gameMode}`);
+        setTimeout(() => startRound(), 1000);
         break;
       }
 
@@ -404,10 +491,7 @@ wss.on('connection', (ws) => {
         send(me, { t: 'plantStarted', duration: BOMB_PLANT_DURATION });
         break;
       }
-      case 'cancelPlant': {
-        if (me.planting) { me.planting = null; send(me, { t: 'plantCancelled' }); }
-        break;
-      }
+      case 'cancelPlant': { if (me.planting) { me.planting = null; send(me, { t: 'plantCancelled' }); } break; }
       case 'finishPlant': {
         if (!me.alive || !me.planting || me.team !== 'red') break;
         if (Date.now() - me.planting.startTime < me.planting.duration - 200) break;
@@ -427,10 +511,7 @@ wss.on('connection', (ws) => {
         send(me, { t: 'defuseStarted', duration: BOMB_DEFUSE_DURATION });
         break;
       }
-      case 'cancelDefuse': {
-        if (me.defusing) { me.defusing = null; send(me, { t: 'defuseCancelled' }); }
-        break;
-      }
+      case 'cancelDefuse': { if (me.defusing) { me.defusing = null; send(me, { t: 'defuseCancelled' }); } break; }
       case 'finishDefuse': {
         if (!me.alive || !me.defusing || !activeBomb || me.team !== 'blue') break;
         if (Date.now() - me.defusing.startTime < me.defusing.duration - 200) break;
@@ -449,18 +530,14 @@ wss.on('connection', (ws) => {
     players.delete(me.id);
     broadcast({ t: 'leave', id: me.id });
     console.log(`- ${me.name} left (${players.size} online)`);
-
-    if (players.size === 0) {
-      roundActive = false;
-      activeBomb = null;
-    }
+    if (players.size === 0) { roundActive = false; activeBomb = null; }
   });
 });
 
 setInterval(() => {
   if (players.size === 0) return;
   const states = [...players.values()].filter(p => p.alive)
-    .map(p => ({ id: p.id, pos: p.pos, ry: p.ry, rx: p.rx, anim: p.anim, hp: p.hp, armor: p.armor }));
+    .map(p => ({ id: p.id, pos: p.pos, ry: p.ry, rx: p.rx, anim: p.anim, hp: p.hp, armor: p.armor, flashing: p.flashing || 0 }));
   broadcast({ t: 'states', states });
 }, 50);
 
@@ -473,8 +550,7 @@ setInterval(() => {
 setInterval(() => {
   wss.clients.forEach(ws => {
     if (!ws.isAlive) return ws.terminate();
-    ws.isAlive = false;
-    ws.ping();
+    ws.isAlive = false; ws.ping();
   });
 }, 30000);
 
