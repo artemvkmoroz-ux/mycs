@@ -9,7 +9,7 @@ const EYE = 1.62, P_HALF = 0.3, P_HEIGHT = 1.8;
 const GRAVITY = 23, JUMP_V = 8.6, WALK = 5.8, SPRINT = 8.4;
 
 const WEAPONS = {
-  rifle:   { name: 'АВТОМАТ',  dmg: 18, rate: 110,  mag: 30, reload: 1800, spread: 0.014, auto: true,  pellets: 1, range: 90 },
+  rifle:   { name: 'AK-47',    dmg: 18, rate: 110,  mag: 30, reload: 1800, spread: 0.014, auto: true,  pellets: 1, range: 90 },
   shotgun: { name: 'ДРОБОВИК', dmg: 9,  rate: 850,  mag: 6,  reload: 2200, spread: 0.06,  auto: false, pellets: 8, range: 32 },
   sniper:  { name: 'AWP',      dmg: 70, rate: 1400, mag: 5,  reload: 2400, spread: 0.002, auto: false, pellets: 1, range: 140 },
   deagle:  { name: 'DEAGLE',   dmg: 45, rate: 400,  mag: 7,  reload: 2000, spread: 0.01,  auto: false, pellets: 1, range: 100 },
@@ -66,10 +66,9 @@ const placedMeshes = new Map();
 const mapBlockIndex = new Map();
 let ws = null, myId = -1, myTeam = 'red', myName = '';
 const remotes = new Map();
-const scores = { red: 0, blue: 0 };
 let matchScore = { red: 0, blue: 0 };
-let roundTimeLeft = 0;
-let buyTimeLeft = 0;
+let roundTimeLeft = 115000;
+let buyTimeLeft = 15000;
 let inBuyPhase = false;
 
 const me = {
@@ -100,7 +99,6 @@ let buyMenuOpen = false;
 
 const tracers = [], particles = [];
 
-// Бомба
 let activeBomb = null;
 let bombMesh = null;
 let bombTimerInterval = null;
@@ -113,16 +111,13 @@ let defuseStartTime = 0;
 let defuseDuration = 5000;
 let defuseProgressInterval = null;
 
-// Читы
 let isCheater = false;
 let aimbotOn = false;
 let wallhackOn = false;
 const cheatESP = new Map();
 
-// FPS
 let fpsFrames = 0, fpsLast = performance.now();
 
-// Mobile
 let joystickActive = false;
 let joystickVector = { x: 0, y: 0 };
 let touchLookId = null;
@@ -193,11 +188,9 @@ function setupAuth() {
   const passInput = $('regPassword');
   const btn = $('regBtn');
   const err = $('authErr');
-
   nameInput.value = localStorage.getItem('blockade_name') || '';
   passInput.value = localStorage.getItem('blockade_password') || '';
   nameInput.focus();
-
   const start = () => {
     const name = nameInput.value.trim();
     const pass = passInput.value.trim();
@@ -220,6 +213,8 @@ function showMenu(name) {
   $('settings').style.display = 'none';
   $('menu').style.display = 'flex';
   $('menuNickText').textContent = name;
+  $('menuNickBig').textContent = name.toUpperCase();
+  $('userAvatar').textContent = name.charAt(0).toUpperCase();
   $('playBtn').disabled = false;
 }
 
@@ -230,31 +225,28 @@ function showAuth() {
 }
 
 function setupMenu() {
-  const btn = $('playBtn'), err = $('menuErr');
-
-  btn.addEventListener('click', () => {
-    const name = $('menuNickText').textContent;
+  const err = $('menuErr');
+  const startConnect = () => {
+    const name = $('menuNickBig').textContent;
     const pass = localStorage.getItem('blockade_password') || '';
-    if (name === '—' || !name) { err.textContent = 'Введи ник!'; return; }
+    if (!name || name === '—') { err.textContent = 'Введи ник!'; return; }
     if (!pass) { err.textContent = 'Введи пароль!'; return; }
     err.textContent = '';
-    btn.disabled = true;
+    $('playBtn').disabled = true;
     connect(name, pass);
-  });
-
+  };
+  $('playBtn').addEventListener('click', startConnect);
+  $('quickPlayBtn').addEventListener('click', startConnect);
   $('logoutBtn').addEventListener('click', () => showAuth());
-
   $('settingsBtn').addEventListener('click', () => {
     $('menu').style.display = 'none';
     $('settings').style.display = 'flex';
     applySettings();
   });
-
   $('settingsBack').addEventListener('click', () => {
     $('settings').style.display = 'none';
     $('menu').style.display = 'flex';
   });
-
   $('toggleMobile').addEventListener('click', () => { SETTINGS.mobile = !SETTINGS.mobile; saveSettings(); if (SETTINGS.mobile && inGame && !mobileInited) initMobileControls(); });
   $('toggleRadar').addEventListener('click', () => { SETTINGS.radar = !SETTINGS.radar; saveSettings(); });
   $('toggleFps').addEventListener('click', () => { SETTINGS.showFps = !SETTINGS.showFps; saveSettings(); });
@@ -274,13 +266,11 @@ function openBuyMenu() {
   updateBuyMenu();
   if (document.pointerLockElement) document.exitPointerLock();
 }
-
 function closeBuyMenu() {
   buyMenuOpen = false;
   $('buyMenu').classList.remove('active');
   if (inGame && !me.dead) renderer.domElement.requestPointerLock();
 }
-
 function updateBuyMenu() {
   $('buyMoneyVal').textContent = me.money;
   document.querySelectorAll('#buyMenu .buyItem').forEach(el => {
@@ -298,7 +288,6 @@ function updateBuyMenu() {
     }
   });
 }
-
 function buyItem(item) {
   if (!inBuyPhase) { SND.error(); sysChat('⚠️ Закупка только в начале раунда!'); return; }
   if (!item) return;
@@ -313,7 +302,7 @@ function connect(name, password) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}`);
   ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name, password }));
-  ws.onerror = () => { $('menuErr').textContent = 'Ошибка подключения к серверу'; $('playBtn').disabled = false; };
+  ws.onerror = () => { $('menuErr').textContent = 'Ошибка подключения'; $('playBtn').disabled = false; };
   ws.onclose = () => {
     if (inGame) {
       inGame = false;
@@ -322,24 +311,22 @@ function connect(name, password) {
       document.exitPointerLock();
       $('hud').style.display = 'none';
       $('menu').style.display = 'flex';
-      $('menuErr').textContent = 'Соединение потеряно. Заходи снова!';
+      $('menuErr').textContent = 'Соединение потеряно.';
       $('playBtn').disabled = false;
     }
   };
   ws.onmessage = e => handleMsg(JSON.parse(e.data));
 }
-
 function netSend(msg) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); }
 
 function handleMsg(m) {
   switch (m.t) {
-    case 'authFailed': {
+    case 'authFailed':
       $('authErr').textContent = m.reason || 'Ошибка';
       $('menuErr').textContent = m.reason || 'Ошибка';
       $('playBtn').disabled = false;
       showAuth();
       break;
-    }
     case 'welcome': {
       myId = m.id; myTeam = m.team;
       isCheater = !!m.cheater;
@@ -347,7 +334,6 @@ function handleMsg(m) {
       me.ry = m.ry; me.rx = 0;
       me.money = m.money || 800;
       me.armor = m.armor || 0;
-      Object.assign(scores, m.matchScore || m.scores || {});
       matchScore = m.matchScore || { red: 0, blue: 0 };
       for (const p of m.players) addRemote(p);
       for (const d of m.destroyed || []) removeBlockLocal(d.x, d.y, d.z, true);
@@ -355,14 +341,13 @@ function handleMsg(m) {
       startGame();
       initVoice();
       if (SETTINGS.mobile) initMobileControls();
-      updateMoneyHud();
-      updateArmorHud();
+      updateMoneyHud(); updateHealthHud(); updateMatchScoreHud();
       break;
     }
-    case 'join': addRemote(m.p); feed(`${m.p.name} зашёл`, m.p.team); break;
+    case 'join': addRemote(m.p); break;
     case 'leave': {
       const r = remotes.get(m.id);
-      if (r) { feed(`${r.name} вышел`, r.team); scene.remove(r.group); remotes.delete(m.id); }
+      if (r) { scene.remove(r.group); remotes.delete(m.id); }
       closeVoicePeer(m.id);
       break;
     }
@@ -386,26 +371,17 @@ function handleMsg(m) {
       if (r) r.shootAnim = 0.12;
       break;
     }
-    case 'hp': {
-      me.hp = m.hp;
-      me.armor = m.armor || 0;
-      updateHpHud();
-      updateArmorHud();
+    case 'hp':
+      me.hp = m.hp; me.armor = m.armor || 0;
+      updateHealthHud();
       SND.hurt();
       const v = $('dmgVignette');
       v.style.opacity = 1; setTimeout(() => v.style.opacity = 0, 120);
       break;
-    }
-    case 'armorUpdate': {
-      me.armor = m.armor;
-      updateArmorHud();
-      break;
-    }
-    case 'moneyUpdate': {
-      me.money = m.money;
-      updateMoneyHud();
-      break;
-    }
+    case 'armorUpdate':
+      me.armor = m.armor; updateHealthHud(); break;
+    case 'moneyUpdate':
+      me.money = m.money; updateMoneyHud(); break;
     case 'hitconfirm': {
       const hm = $('hitmarker');
       hm.classList.toggle('head', m.head);
@@ -421,7 +397,7 @@ function handleMsg(m) {
       const vTeam = victim ? victim.team : myTeam;
       const kName = killer ? killer.name : myName;
       const kTeam = killer ? killer.team : myTeam;
-      feed(`${kName} ${m.head ? '[HS] ' : ''}► ${vName}`, kTeam, vTeam);
+      feed(kName, kTeam, vName, vTeam, m.head, m.w);
       if (victim) {
         victim.alive = false; victim.deaths++;
         deathBurst(victim.group.position);
@@ -430,7 +406,7 @@ function handleMsg(m) {
       if (killer) killer.kills++;
       if (m.victim === myId) {
         me.hp = 0; me.dead = true; me.deaths++;
-        updateHpHud();
+        updateHealthHud();
         SND.death();
         showDeathScreen(kName);
       }
@@ -445,7 +421,7 @@ function handleMsg(m) {
         me.ammo = { rifle: 30, shotgun: 6, sniper: 5, deagle: 7 };
         me.blocks = 64; me.reloading = false;
         me.ry = myTeam === 'red' ? -Math.PI / 2 : Math.PI / 2; me.rx = 0;
-        updateHpHud(); updateArmorHud(); updateAmmoHud(); updateHotbar();
+        updateHealthHud(); updateAmmoHud(); updateHotbar();
         $('deathScreen').style.display = 'none';
         const f = $('respawnFlash');
         f.style.opacity = 0.8; f.style.transition = 'none';
@@ -466,8 +442,7 @@ function handleMsg(m) {
     case 'destroy': removeBlockLocal(m.x, m.y, m.z); break;
     case 'rtc': handleRtcSignal(m.from, m.data); break;
 
-    // ============ РАУНДЫ ============
-    case 'roundStart': {
+    case 'roundStart':
       matchScore = m.matchScore || matchScore;
       roundTimeLeft = m.roundTime || 115000;
       buyTimeLeft = m.buyTime || 15000;
@@ -475,20 +450,19 @@ function handleMsg(m) {
       updateMatchScoreHud();
       sysChat('🎬 НОВЫЙ РАУНД!');
       break;
-    }
-    case 'timer': {
+    case 'timer':
       roundTimeLeft = m.roundLeft;
       inBuyPhase = m.buyPhase;
       updateTimerHud();
+      if (inBuyPhase) buyTimeLeft -= 1000;
       break;
-    }
     case 'roundEnd': {
       roundTimeLeft = 0; inBuyPhase = false;
       matchScore = m.matchScore || matchScore;
       updateMatchScoreHud();
       const win = $('roundWin');
       win.className = m.winner;
-      $('roundWinText').textContent = m.winner === 'red' ? 'КРАСНЫЕ ПОБЕДИЛИ!' : m.winner === 'blue' ? 'СИНИЕ ПОБЕДИЛИ!' : 'НИЧЬЯ';
+      $('roundWinText').textContent = m.winner === 'red' ? 'КРАСНЫЕ ПОБЕДИЛИ' : m.winner === 'blue' ? 'СИНИЕ ПОБЕДИЛИ' : 'НИЧЬЯ';
       const reasons = { bomb: 'Бомба взорвалась', defuse: 'Бомба разминирована', time: 'Время вышло', elimination: 'Уничтожение' };
       $('roundWinSub').textContent = reasons[m.reason] || '';
       win.style.display = 'flex';
@@ -497,8 +471,7 @@ function handleMsg(m) {
       break;
     }
     case 'matchEnd': {
-      const ms = $('matchEndScreen');
-      ms.classList.add('active');
+      $('matchEndScreen').classList.add('active');
       const win = $('matchWinText');
       win.className = 'matchWin ' + m.winner;
       win.textContent = m.winner === 'red' ? 'КРАСНЫЕ ПОБЕДИЛИ МАТЧ!' : 'СИНИЕ ПОБЕДИЛИ МАТЧ!';
@@ -513,47 +486,36 @@ function handleMsg(m) {
       }, 1000);
       break;
     }
-    case 'newMatch': {
+    case 'newMatch':
       $('matchEndScreen').classList.remove('active');
       matchScore = { red: 0, blue: 0 };
       updateMatchScoreHud();
-      sysChat('🏆 НОВЫЙ МАТЧ!');
       break;
-    }
 
-    // ============ ПОКУПКА ============
-    case 'bought': {
+    case 'bought':
       me.money = m.money;
       me.armor = m.armor;
       me.weapons = m.weapons || me.weapons;
-      updateMoneyHud();
-      updateArmorHud();
-      updateBuyMenu();
+      updateMoneyHud(); updateHealthHud(); updateBuyMenu();
       SND.buy();
       break;
-    }
-    case 'buyError': {
+    case 'buyError':
       sysChat('⚠️ ' + m.text);
       SND.error();
       break;
-    }
 
-    // ============ БОМБА ============
-    case 'plantStarted': { plantDuration = m.duration || 3000; break; }
-    case 'plantCancelled': {
+    case 'plantStarted': plantDuration = m.duration || 3000; break;
+    case 'plantCancelled':
       planting = false;
       clearInterval(plantProgressInterval); plantProgressInterval = null;
       $('plantProgress').style.display = 'none';
-      sysChat('❌ Закладка отменена');
       break;
-    }
-    case 'bombPlanted': {
+    case 'bombPlanted':
       activeBomb = m.bomb;
       spawnBombMesh();
       startBombTimer();
       sysChat('💣 БОМБА ЗАЛОЖЕНА!');
       break;
-    }
     case 'bombExploded': {
       if (bombMesh) { scene.remove(bombMesh); bombMesh = null; }
       activeBomb = null;
@@ -567,22 +529,20 @@ function handleMsg(m) {
       SND.boom(0.6);
       break;
     }
-    case 'bombDefused': {
+    case 'bombDefused':
       if (bombMesh) { scene.remove(bombMesh); bombMesh = null; }
       activeBomb = null;
       if (bombTimerInterval) { clearInterval(bombTimerInterval); bombTimerInterval = null; }
       $('bombTimer').style.display = 'none';
       sysChat('🔧 БОМБА РАЗМИНИРОВАНА!');
       break;
-    }
-    case 'bombError': { sysChat('⚠️ ' + m.text); break; }
-    case 'defuseStarted': { defuseDuration = m.duration || 5000; break; }
-    case 'defuseCancelled': {
+    case 'bombError': sysChat('⚠️ ' + m.text); break;
+    case 'defuseStarted': defuseDuration = m.duration || 5000; break;
+    case 'defuseCancelled':
       defusing = false;
       clearInterval(defuseProgressInterval); defuseProgressInterval = null;
       $('plantProgress').style.display = 'none';
       break;
-    }
     case 'chat': addChatMessage(m.name, m.team, m.text); break;
   }
 }
@@ -590,40 +550,29 @@ function handleMsg(m) {
 // ============================================================
 // HUD update
 // ============================================================
-function updateHpHud() {
+function updateHealthHud() {
   const hp = Math.max(0, me.hp);
-  $('hpNum').textContent = hp;
+  const el = $('hpNum');
+  el.textContent = hp;
+  el.classList.toggle('low', hp <= 25);
+  el.classList.toggle('mid', hp > 25 && hp <= 60);
   $('hpBar').style.width = hp + '%';
-  $('hpNum').style.color = hp > 50 ? '#4ade80' : hp > 25 ? '#f0ad4e' : '#ff5555';
-  $('hpBar').style.background = hp > 50 ? 'linear-gradient(90deg,#4ade80,#22c55e)' : hp > 25 ? 'linear-gradient(90deg,#f0ad4e,#e8922c)' : 'linear-gradient(90deg,#ff5555,#cc2222)';
+  $('hpPct').textContent = hp + '%';
+  const a = $('armorBar');
+  a.style.width = Math.max(0, me.armor) + '%';
+  $('armorPct').textContent = Math.max(0, me.armor) + '%';
 }
-function updateArmorHud() {
-  const a = $('armorHud');
-  if (me.armor > 0) { a.style.display = 'block'; a.textContent = '🛡 ' + me.armor; }
-  else a.style.display = 'none';
-}
-function updateMoneyHud() {
-  $('moneyHud').textContent = '$' + me.money;
-}
+function updateMoneyHud() { $('moneyHud').textContent = '$' + me.money; }
 function updateMatchScoreHud() {
   $('matchRed').textContent = matchScore.red;
   $('matchBlue').textContent = matchScore.blue;
 }
 function updateTimerHud() {
-  if (inBuyPhase) {
-    const s = Math.max(0, Math.ceil(buyTimeLeft / 1000));
-    $('phaseText').textContent = 'ЗАКУПКА · ' + s + 'с';
-    $('timerText').textContent = formatTime(roundTimeLeft);
-  } else {
-    $('phaseText').textContent = 'В БОЮ';
-    $('timerText').textContent = formatTime(roundTimeLeft);
-  }
-  $('timerText').classList.toggle('warning', roundTimeLeft < 20000);
-  buyTimeLeft -= 1000;
-}
-function formatTime(ms) {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  const el = $('timerText');
+  const s = Math.max(0, Math.ceil(roundTimeLeft / 1000));
+  el.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  el.classList.toggle('warning', roundTimeLeft < 20000 && !inBuyPhase);
+  $('phaseText').textContent = inBuyPhase ? 'ЗАКУПКА · ' + Math.max(0, Math.ceil(buyTimeLeft / 1000)) + 'с' : 'В БОЮ';
 }
 
 // ============================================================
@@ -677,7 +626,7 @@ async function initVoice() {
       });
       micTrack = micStream.getAudioTracks()[0];
       micTrack.enabled = false;
-      sysChat('🎤 Голосовой чат: V');
+      sysChat('🎤 V — говорить');
     } catch { voiceFailed = true; }
   }
   for (const id of remotes.keys()) makeVoicePeer(id, true);
@@ -770,7 +719,6 @@ function placeBlockLocal(x, y, z, team) {
   mesh.castShadow = mesh.receiveShadow = true;
   scene.add(mesh);
   placedMeshes.set(k, mesh);
-  SND.place();
 }
 const ZERO_M4 = new THREE.Matrix4().makeScale(0, 0, 0);
 function removeBlockLocal(x, y, z, silent) {
@@ -896,7 +844,6 @@ function updateRemotes(dt) {
 function setupCheats() {
   if (!isCheater) { $('cheatPanel').style.display = 'none'; return; }
   $('cheatPanel').style.display = 'flex';
-  console.log('🔥 ЧИТ-ПАНЕЛЬ АКТИВНА (moroz)');
   sysChat('🔥 ЧИТ-ПАНЕЛЬ: X — aimbot, Z — wallhack');
 }
 function toggleAimbot() {
@@ -904,14 +851,12 @@ function toggleAimbot() {
   aimbotOn = !aimbotOn;
   $('cheatAimVal').textContent = aimbotOn ? 'ON' : 'OFF';
   $('cheatAim').classList.toggle('active', aimbotOn);
-  sysChat(aimbotOn ? '🎯 Aimbot ВКЛ' : '🎯 Aimbot ВЫКЛ');
 }
 function toggleWallhack() {
   if (!isCheater) return;
   wallhackOn = !wallhackOn;
   $('cheatWallVal').textContent = wallhackOn ? 'ON' : 'OFF';
   $('cheatWall').classList.toggle('active', wallhackOn);
-  sysChat(wallhackOn ? '👁 Wallhack ВКЛ' : '👁 Wallhack ВЫКЛ');
   if (!wallhackOn) { for (const m of cheatESP.values()) scene.remove(m); cheatESP.clear(); }
 }
 function runAimbot() {
@@ -973,7 +918,6 @@ function collideAxis(pos) {
         if (solid(x, y, z)) return true;
   return false;
 }
-
 function movePlayer(dt) {
   if (SETTINGS.mobile && joystickActive) {
     const speed = SPRINT;
@@ -1045,7 +989,6 @@ function raycastVoxels(o, d, maxDist) {
   }
   return null;
 }
-
 function rayAABB(o, d, min, max) {
   let tmin = 0, tmax = Infinity;
   for (const ax of ['x', 'y', 'z']) {
@@ -1064,10 +1007,7 @@ function rayAABB(o, d, min, max) {
 // ============================================================
 // Weapons
 // ============================================================
-function currentWeapon() {
-  const wkey = me.weapon || 'rifle';
-  return WEAPONS[wkey] || WEAPONS.rifle;
-}
+function currentWeapon() { return WEAPONS[me.weapon || 'rifle'] || WEAPONS.rifle; }
 
 function tryShoot(now) {
   const wkey = me.weapon || 'rifle';
@@ -1080,19 +1020,16 @@ function tryShoot(now) {
   me.lastShot = now;
   me.ammo[wkey]--;
   updateAmmoHud();
-
   const origin = camera.getWorldPosition(new THREE.Vector3());
   const baseDir = new THREE.Vector3();
   camera.getWorldDirection(baseDir);
   const spread = w.spread * (me.zoomed ? 0.25 : 1) * (me.onGround ? 1 : 1.8);
-
   for (let p = 0; p < w.pellets; p++) {
     const dir = baseDir.clone();
     dir.x += (Math.random() - 0.5) * 2 * spread;
     dir.y += (Math.random() - 0.5) * 2 * spread;
     dir.z += (Math.random() - 0.5) * 2 * spread;
     dir.normalize();
-
     const blockHit = raycastVoxels(origin, dir, w.range);
     let bestPlayer = null, bestT = blockHit ? blockHit.dist : w.range;
     for (const r of remotes.values()) {
@@ -1206,7 +1143,6 @@ function burst(pos, color, n, spd) {
 const bloodBurst = p => burst(p, 0xaa1111, 7, 4);
 const debrisBurst = p => burst(p, 0x8a8a8a, 5, 3);
 const deathBurst = p => { burst(p.clone().add(new THREE.Vector3(0, 1, 0)), 0xaa1111, 16, 5); };
-
 function updateFx(dt) {
   for (let i = tracers.length - 1; i >= 0; i--) {
     const t = tracers[i]; t.ttl -= dt;
@@ -1225,7 +1161,6 @@ function updateFx(dt) {
 // View model
 // ============================================================
 const vm = { group: null, models: {}, recoil: 0, bob: 0 };
-
 function buildViewModels() {
   vm.group = new THREE.Group();
   camera.add(vm.group);
@@ -1241,9 +1176,7 @@ function buildViewModels() {
     g.add(h);
     return g;
   }
-  // rifle
-  {
-    const g = gunBase();
+  { const g = gunBase();
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.1, 0.5), dark);
     const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, 0.3), dark2);
     barrel.position.set(0, 0.01, -0.38);
@@ -1254,9 +1187,7 @@ function buildViewModels() {
     g.add(body, barrel, mag, stock);
     vm.models.rifle = g;
   }
-  // shotgun
-  {
-    const g = gunBase();
+  { const g = gunBase();
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.09, 0.45), wood);
     const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.35), dark);
     barrel.position.set(0, 0.03, -0.35);
@@ -1265,9 +1196,7 @@ function buildViewModels() {
     g.add(body, barrel, pump);
     vm.models.shotgun = g;
   }
-  // sniper
-  {
-    const g = gunBase();
+  { const g = gunBase();
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.55), dark);
     const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.45), dark2);
     barrel.position.set(0, 0.02, -0.48);
@@ -1278,40 +1207,31 @@ function buildViewModels() {
     g.add(body, barrel, scope, stock);
     vm.models.sniper = g;
   }
-  // deagle
-  {
-    const g = gunBase();
+  { const g = gunBase();
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.25), dark);
     const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.2), dark2);
     barrel.position.set(0, 0.03, -0.22);
     g.add(body, barrel);
     vm.models.deagle = g;
   }
-  // blocks
-  {
-    const g = new THREE.Group();
+  { const g = new THREE.Group();
     const cube = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.26, 0.26), mats[myTeam === 'red' ? 'redWool' : 'blueWool']);
     cube.rotation.y = 0.5;
     g.add(cube);
     vm.models.blocks = g;
   }
-  // pickaxe
-  {
-    const g = gunBase();
+  { const g = gunBase();
     const stone = new THREE.MeshLambertMaterial({ color: 0x7a7a7a });
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.55), wood);
-    handle.rotation.x = -0.5;
-    handle.position.set(0, 0.05, -0.15);
+    handle.rotation.x = -0.5; handle.position.set(0, 0.05, -0.15);
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.34, 0.09), stone);
-    head.rotation.x = -0.5;
-    head.position.set(0, 0.21, -0.38);
+    head.rotation.x = -0.5; head.position.set(0, 0.21, -0.38);
     g.add(handle, head);
     vm.models.pickaxe = g;
   }
   for (const m of Object.values(vm.models)) { vm.group.add(m); m.visible = false; }
   vm.models[SLOTS[me.slot]].visible = true;
 }
-
 function updateViewModel(dt, moving) {
   if (!vm.group) return;
   vm.recoil = Math.max(0, vm.recoil - dt * 7);
@@ -1324,10 +1244,8 @@ function updateViewModel(dt, moving) {
   vm.group.rotation.x = vm.recoil * 0.14;
   vm.group.visible = !me.dead && !(me.zoomed && SLOTS[me.slot] === 'sniper');
 }
-
 function selectSlot(i) {
   if (i >= SLOTS.length || i === me.slot) return;
-  // Проверка покупки
   const wkey = SLOTS[i];
   if (WEAPONS[wkey] && !WEAPONS[wkey].builder && !WEAPONS[wkey].tool) {
     if (!me.weapons[wkey] && wkey !== 'rifle') {
@@ -1352,8 +1270,7 @@ function drawIcon(kind) {
   const g = c.getContext('2d');
   g.imageSmoothingEnabled = false;
   if (kind === 'blocks') {
-    const cols = myTeam === 'red'
-      ? ['#b03430', '#a32e2a', '#bd3d38'] : ['#3a4fb4', '#3448a6', '#4458c2'];
+    const cols = myTeam === 'red' ? ['#b03430','#a32e2a','#bd3d38'] : ['#3a4fb4','#3448a6','#4458c2'];
     for (let y = 10; y < 54; y++) for (let x = 10; x < 54; x++) {
       g.fillStyle = cols[Math.floor(Math.random() * cols.length)];
       g.fillRect(x, y, 1, 1);
@@ -1366,14 +1283,12 @@ function drawIcon(kind) {
     for (let i = 0; i < 30; i++) g.fillRect(14 + i, 48 - i, 4, 4);
     g.fillStyle = '#7a7a7a';
     g.fillRect(10, 12, 12, 8); g.fillRect(18, 8, 16, 8); g.fillRect(32, 8, 12, 8); g.fillRect(42, 12, 10, 8); g.fillRect(48, 18, 8, 10);
-    g.fillStyle = '#9a9a9a';
-    g.fillRect(18, 10, 24, 4);
+    g.fillStyle = '#9a9a9a'; g.fillRect(18, 10, 24, 4);
     return c.toDataURL();
   }
   g.fillStyle = '#222';
   if (kind === 'rifle') {
-    g.fillRect(4, 28, 48, 10);
-    g.fillRect(48, 30, 12, 6);
+    g.fillRect(4, 28, 48, 10); g.fillRect(48, 30, 12, 6);
     g.fillStyle = '#444'; g.fillRect(20, 38, 8, 14);
     g.fillStyle = '#6e4f2a'; g.fillRect(4, 26, 12, 16);
     g.fillStyle = '#444'; g.fillRect(32, 22, 12, 6);
@@ -1387,15 +1302,14 @@ function drawIcon(kind) {
     g.fillStyle = '#6e4f2a'; g.fillRect(4, 30, 10, 14);
     g.fillStyle = '#555'; g.fillRect(24, 38, 6, 10);
   } else if (kind === 'deagle') {
-    g.fillRect(16, 22, 20, 20);
-    g.fillRect(36, 26, 16, 8);
+    g.fillRect(16, 22, 20, 20); g.fillRect(36, 26, 16, 8);
     g.fillStyle = '#444'; g.fillRect(20, 42, 12, 8);
   }
   return c.toDataURL();
 }
-
 function updateHotbar() {
   const bar = $('hotbar');
+  if (!bar) return;
   bar.innerHTML = '';
   SLOTS.forEach((s, i) => {
     const div = document.createElement('div');
@@ -1415,45 +1329,37 @@ function updateHotbar() {
     bar.appendChild(div);
   });
 }
-
 function updateAmmoHud() {
   const wkey = me.weapon || 'rifle';
   const w = WEAPONS[wkey] || WEAPONS.rifle;
   $('weaponName').textContent = w.name;
-  $('ammoNum').textContent = w.builder ? `${me.blocks}` : w.tool ? '—' : `${me.ammo[wkey] || 0} / ${w.mag}`;
+  $('ammoCur').textContent = w.builder ? me.blocks : w.tool ? '∞' : (me.ammo[wkey] || 0);
+  $('ammoMax').textContent = w.builder ? '' : w.tool ? '' : w.mag;
 }
-
-function feed(text, teamA, teamB) {
+function feed(killer, kTeam, victim, vTeam, head, weapon) {
   const kf = $('killfeed');
   const div = document.createElement('div');
-  div.textContent = text;
-  div.className = teamA === 'red' ? 'r' : 'b';
+  div.className = 'kfItem ' + (kTeam === 'red' ? 'red' : 'blue');
+  const wIcon = weapon ? `<span class="weapon">${weapon.toUpperCase()}</span>` : '';
+  div.innerHTML = `<span class="killer">${killer}</span> ${head ? '<span class="hs">[HS]</span>' : ''} ${wIcon} <span class="victim">${victim}</span>`;
   kf.prepend(div);
   while (kf.children.length > 6) kf.lastChild.remove();
-  setTimeout(() => div.remove(), 5000);
+  setTimeout(() => div.remove(), 6000);
 }
-
 function showDeathScreen(killerName) {
   $('deathScreen').style.display = 'flex';
   $('deathBy').textContent = 'Тебя убил: ' + killerName;
-  let left = 3.5;
-  const cd = $('deathCd');
-  const iv = setInterval(() => {
-    left -= 0.1;
-    if (left <= 0 || !me.dead) { clearInterval(iv); cd.textContent = ''; return; }
-    cd.textContent = 'Ждём конца раунда...';
-  }, 100);
+  $('deathCd').textContent = 'Ждём конца раунда...';
 }
-
 function updateScoreboard() {
   const sb = $('scoreboard');
   if (!tabHeld) { sb.style.display = 'none'; return; }
   const all = [
-    { name: myName + ' (ты)', team: myTeam, kills: me.kills, deaths: me.deaths, me: true, money: me.money },
+    { name: myName + ' (ты)', team: myTeam, kills: me.kills, deaths: me.deaths, me: true },
     ...[...remotes.values()].map(r => ({ name: r.name, team: r.team, kills: r.kills, deaths: r.deaths })),
   ];
   const row = p => `<tr><td class="${p.me ? 'me' : ''}">${p.name}</td><td>${p.kills}</td><td>${p.deaths}</td></tr>`;
-  const table = list => `<table><tr><th>ИГРОК</th><th>УБИЙСТВА</th><th>СМЕРТИ</th></tr>${list.sort((a, b) => b.kills - a.kills).map(row).join('')}</table>`;
+  const table = list => `<table><tr><th>ИГРОК</th><th>УБИЙСТВА</th><th>СМЕРТИ</th></tr>${list.sort((a,b) => b.kills - a.kills).map(row).join('')}</table>`;
   sb.innerHTML =
     `<h3 class="red">КРАСНЫЕ — ${matchScore.red}</h3>` + table(all.filter(p => p.team === 'red')) +
     `<h3 class="blue">СИНИЕ — ${matchScore.blue}</h3>` + table(all.filter(p => p.team === 'blue'));
@@ -1461,7 +1367,7 @@ function updateScoreboard() {
 }
 
 // ============================================================
-// Радар
+// Радар (прямоугольный)
 // ============================================================
 function updateRadar() {
   const canvas = $('radarCanvas');
@@ -1470,39 +1376,45 @@ function updateRadar() {
   const W = canvas.width, H = canvas.height, cx = W/2, cy = H/2;
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = 'rgba(15,20,15,0.85)';
-  ctx.beginPath(); ctx.arc(cx, cy, cx-2, 0, Math.PI*2); ctx.fill();
-  const R = cx - 10;
-  const scale = R / 50;
+  ctx.fillRect(0, 0, W, H);
+  // сетка
+  ctx.strokeStyle = 'rgba(255,255,255,.05)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < W; i += 40) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, H); ctx.stroke(); }
+  for (let i = 0; i < H; i += 40) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(W, i); ctx.stroke(); }
+
+  const scale = 3.5;
   ctx.save();
   ctx.translate(cx, cy);
+
   // Враги
   for (const r of remotes.values()) {
     if (!r.alive || r.team === myTeam) continue;
     const dx = r.group.position.x - me.pos.x;
     const dz = r.group.position.z - me.pos.z;
     const cs = Math.cos(-me.ry), sn = Math.sin(-me.ry);
-    const rx = dx * cs - dz * sn;
-    const rz = dx * sn + dz * cs;
-    if (Math.abs(rx) > 50 || Math.abs(rz) > 50) continue;
+    const rx = (dx * cs - dz * sn) * scale;
+    const rz = (dx * sn + dz * cs) * scale;
+    if (Math.abs(rx) > W/2 || Math.abs(rz) > H/2) continue;
     ctx.fillStyle = '#ff3333';
-    ctx.beginPath(); ctx.arc(rx * scale, rz * scale, 5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(rx, rz, 5, 0, Math.PI*2); ctx.fill();
   }
   // Бомба
   if (activeBomb) {
     const dx = activeBomb.x - me.pos.x;
     const dz = activeBomb.z - me.pos.z;
     const cs = Math.cos(-me.ry), sn = Math.sin(-me.ry);
-    const rx = dx * cs - dz * sn;
-    const rz = dx * sn + dz * cs;
-    if (Math.abs(rx) < 50 && Math.abs(rz) < 50) {
+    const rx = (dx * cs - dz * sn) * scale;
+    const rz = (dx * sn + dz * cs) * scale;
+    if (Math.abs(rx) < W/2 && Math.abs(rz) < H/2) {
       ctx.fillStyle = '#ffaa00';
-      ctx.beginPath(); ctx.arc(rx * scale, rz * scale, 7, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(rx, rz, 7, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = '#000'; ctx.font = 'bold 10px monospace';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('B', rx * scale, rz * scale);
+      ctx.fillText('B', rx, rz);
     }
   }
-  // Я
+  // Я — стрелка
   ctx.fillStyle = '#44ff44';
   ctx.beginPath();
   ctx.moveTo(0, -10); ctx.lineTo(8, 8); ctx.lineTo(0, 4); ctx.lineTo(-8, 8);
@@ -1615,12 +1527,8 @@ function showDefuseProgress() {
 function initMobileControls() {
   if (mobileInited) return;
   mobileInited = true;
-  const zone = $('joystickZone');
-  const knob = $('joystickKnob');
-  const fireBtn = $('fireBtn');
-  const reloadBtn = $('reloadBtn');
-  const jumpBtn = $('jumpBtn');
-  const bombBtn = $('bombBtn');
+  const zone = $('joystickZone'), knob = $('joystickKnob');
+  const fireBtn = $('fireBtn'), reloadBtn = $('reloadBtn'), jumpBtn = $('jumpBtn'), bombBtn = $('bombBtn');
   if (!zone) return;
   let baseCenter = { x: 0, y: 0 };
   const baseRadius = 80;
@@ -1635,8 +1543,7 @@ function initMobileControls() {
   zone.addEventListener('touchmove', e => {
     e.preventDefault();
     if (!joystickActive) return;
-    const t = e.touches[0];
-    updateJoystick(t.clientX, t.clientY, baseCenter, baseRadius, knob);
+    updateJoystick(e.touches[0].clientX, e.touches[0].clientY, baseCenter, baseRadius, knob);
   }, { passive: false });
   zone.addEventListener('touchend', e => {
     e.preventDefault();
@@ -1756,7 +1663,6 @@ function setupInput() {
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
   });
-  // Клик по buy item
   document.querySelectorAll('#buyMenu .buyItem').forEach(el => {
     el.addEventListener('click', () => buyItem(el.dataset.item));
   });
@@ -1800,12 +1706,12 @@ function startGame() {
   $('hud').style.display = 'block';
   $('teamBanner').style.display = 'flex';
   const t = $('teamBannerText');
-  t.textContent = 'ТЫ В КОМАНДЕ ' + TEAM_RU[myTeam];
+  t.textContent = 'КОМАНДА ' + TEAM_RU[myTeam];
   t.style.color = TEAM_COL[myTeam];
   setTimeout(() => { $('teamBanner').style.display = 'none'; }, 2500);
   buildViewModels();
-  updateHpHud(); updateArmorHud(); updateMoneyHud(); updateHotbar(); updateAmmoHud();
-  updateMatchScoreHud();
+  updateHealthHud(); updateMoneyHud(); updateHotbar(); updateAmmoHud();
+  updateMatchScoreHud(); updateTimerHud();
   setupCheats();
   if (SETTINGS.mobile) initMobileControls();
   SND.spawn();
@@ -1833,7 +1739,6 @@ function loop() {
     } else if (!me.dead) {
       me.vel.x = me.vel.z = 0;
     }
-
     camera.rotation.order = 'YXZ';
     camera.rotation.y = me.ry;
     camera.rotation.x = me.rx;
@@ -1842,7 +1747,6 @@ function loop() {
       : ((keys['ShiftLeft'] || keys['ShiftRight']) && moving ? 76 : 70);
     camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 10);
     camera.updateProjectionMatrix();
-
     updateRemotes(dt);
     updateFx(dt);
     updateViewModel(dt, moving > 0);
@@ -1856,7 +1760,6 @@ function loop() {
         fpsFrames = 0; fpsLast = now;
       }
     }
-
     if (now - lastNetSend > 50 && !me.dead) {
       lastNetSend = now;
       netSend({
@@ -1866,7 +1769,6 @@ function loop() {
       });
     }
   }
-
   renderer.render(scene, camera);
 }
 
