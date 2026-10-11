@@ -1,51 +1,27 @@
 // ============================================================
-// map.js — de_dust2 (точная планировка по описаниям CS)
-// ============================================================
-// Координатная сетка:
-//   X: -64 .. +64 (запад → восток)
-//   Z: -64 .. +64 (север → юг)
-//   Y: 0 .. 5 (высота)
-//
-// Расположение зон:
-//   T Spawn (юг, центр-низ)   →  Z = +40..+60
-//   CT Spawn (север)          →  Z = -50..-20
-//   Mid (центр)               →  X = -10..+10, Z = -10..+40
-//   Long A (справа)           →  X = +30..+55, Z = 0..+55
-//   A Site (справа-верх)      →  X = +30..+60, Z = -50..0
-//   B Site (слева-верх)       →  X = -60..-30, Z = -50..0
-//   Tunnels (слева)           →  X = -55..-30, Z = 0..+40
-//   Catwalk (мост к A)        →  X = +10..+30, Z = -15..0
+// map.js — de_dust2 (исправленный)
 // ============================================================
 
 export const HALF = 64;
 
-// ---------- ХЕЛПЕРЫ ----------
 function addB(blocks, x, y, z, type) {
   blocks.push({ x, y, z, type });
 }
-
-// Стена вдоль X
 function wallX(blocks, x1, x2, z, y1, y2, type = 'bricks') {
   for (let x = x1; x <= x2; x++)
     for (let y = y1; y <= y2; y++)
       addB(blocks, x, y, z, type);
 }
-
-// Стена вдоль Z
 function wallZ(blocks, z1, z2, x, y1, y2, type = 'bricks') {
   for (let z = z1; z <= z2; z++)
     for (let y = y1; y <= y2; y++)
       addB(blocks, x, y, z, type);
 }
-
-// Пол
 function floor(blocks, x1, x2, z1, z2, type = 'sand') {
   for (let x = x1; x <= x2; x++)
     for (let z = z1; z <= z2; z++)
       addB(blocks, x, 0, z, type);
 }
-
-// Ящик
 function crate(blocks, x, z, size = 2, type = 'planks') {
   for (let dx = 0; dx < size; dx++)
     for (let dz = 0; dz < size; dz++)
@@ -53,250 +29,147 @@ function crate(blocks, x, z, size = 2, type = 'planks') {
         addB(blocks, x + dx, y, z + dz, type);
 }
 
-// Сложенный ящик (2 уровня)
-function crateStack(blocks, x, z, size = 2) {
-  crate(blocks, x, z, size, 'planks');
-  for (let dx = 0; dx < size; dx++)
-    for (let dz = 0; dz < size; dz++)
-      for (let y = size + 1; y <= size * 2; y++)
-        addB(blocks, x + dx, y, z + dz, 'planks');
-}
-
-// ============================================================
 export function buildMapBlocks() {
   const blocks = [];
 
-  // ============================================================
-  // ПОЛ ВСЕЙ КАРТЫ
-  // ============================================================
+  // === ПОЛ ===
   floor(blocks, -64, 63, -64, 63, 'sand');
 
-  // ============================================================
-  // ВНЕШНИЙ ПЕРИМЕТР
-  // ============================================================
-  wallX(blocks, -64, 63, -64, 1, 6, 'bricks');   // север
-  wallX(blocks, -64, 63, 63, 1, 6, 'bricks');    // юг
-  wallZ(blocks, -64, 63, -64, 1, 6, 'bricks');   // запад
-  wallZ(blocks, -64, 63, 63, 1, 6, 'bricks');    // восток
+  // === ПЕРИМЕТР ===
+  wallX(blocks, -64, 63, -64, 1, 6, 'bricks');
+  wallX(blocks, -64, 63, 63, 1, 6, 'bricks');
+  wallZ(blocks, -64, 63, -64, 1, 6, 'bricks');
+  wallZ(blocks, -64, 63, 63, 1, 6, 'bricks');
 
-  // ============================================================
-  // T SPAWN (юг, центр) — X = -20..+20, Z = +40..+60
-  // ============================================================
-  // Пол T Spawn — плитка
+  // === T SPAWN (юг, центр) ===
   floor(blocks, -20, 20, 40, 60, 'cobble');
-
-  // Стены T Spawn
-  wallZ(blocks, 40, 60, -20, 1, 5, 'bricks');    // западная
-  wallZ(blocks, 40, 60, 20, 1, 5, 'bricks');     // восточная
-  wallX(blocks, -20, 20, 60, 1, 5, 'bricks');    // задняя (юг)
-
-  // Арка на выход из T Spawn (проход на север, X = -8..+8, Z = 40)
-  wallX(blocks, -20, -9, 40, 1, 6, 'bricks');    // стена слева от арки
-  wallX(blocks, 9, 20, 40, 1, 6, 'bricks');      // стена справа от арки
-  // Свод арки
+  wallZ(blocks, 40, 60, -20, 1, 5, 'bricks');
+  wallZ(blocks, 40, 60, 20, 1, 5, 'bricks');
+  wallX(blocks, -20, 20, 60, 1, 5, 'bricks');
+  // Арка
+  wallX(blocks, -20, -9, 40, 1, 6, 'bricks');
+  wallX(blocks, 9, 20, 40, 1, 6, 'bricks');
   for (let x = -8; x <= 8; x++) {
-    addB(blocks, x, 6, 40, 'bricks');
     addB(blocks, x, 5, 40, 'bricks');
+    addB(blocks, x, 6, 40, 'bricks');
   }
-  // Открытый проход: X = -8..+8, Y = 1..4
+  // Ящики в T Spawn
+  crate(blocks, 12, 48, 2, 'planks');
+  crate(blocks, 12, 52, 2, 'planks');
+  crate(blocks, 16, 48, 2, 'planks');
+  crate(blocks, -16, 50, 2, 'planks');
+  crate(blocks, -14, 52, 2, 'planks');
 
-  // === ЯЩИКИ В T SPAWN (справа у стены) ===
-  crateStack(blocks, 12, 48, 2);
-  crateStack(blocks, 12, 52, 2);
-  crateStack(blocks, 16, 48, 2);
-
-  // === ЯЩИКИ В T SPAWN (слева) ===
-  crate(blocks, -16, 50, 2);
-  crate(blocks, -14, 52, 2);
-
-  // === КОРИДОР ИЗ T SPAWN (выход на север) ===
-  // Пол коридора
+  // === КОРИДОР T → MID ===
   floor(blocks, -8, 8, 20, 40, 'sand');
-  // Стены коридора
   wallZ(blocks, 20, 40, -8, 1, 4, 'bricks');
   wallZ(blocks, 20, 40, 8, 1, 4, 'bricks');
+  crate(blocks, -5, 30, 2, 'planks');
+  crate(blocks, 3, 30, 2, 'planks');
 
-  // Ящики в коридоре
-  crate(blocks, -5, 30, 2);
-  crate(blocks, 3, 30, 2);
-
-  // ============================================================
-  // MID (центр) — X = -10..+10, Z = -10..+20
-  // ============================================================
-  // Стены Mid
+  // === MID ===
   wallZ(blocks, -10, 20, -10, 1, 5, 'bricks');
   wallZ(blocks, -10, 20, 10, 1, 5, 'bricks');
-
-  // === MID DOORS (две двери) — Z = 12 ===
-  // Оставляем проход X = -3..+3
+  // Mid Doors
   wallX(blocks, -10, -4, 12, 1, 5, 'bricks');
   wallX(blocks, 4, 10, 12, 1, 5, 'bricks');
-  // Верхняя перекладина
   for (let x = -3; x <= 3; x++) addB(blocks, x, 5, 12, 'bricks');
+  // Xbox
+  crate(blocks, -1, 5, 2, 'planks');
+  crate(blocks, -8, -5, 2, 'planks');
+  crate(blocks, 8, -5, 2, 'planks');
 
-  // === XBOX (знаменитый ящик в Mid) ===
-  crateStack(blocks, -1, 5, 2);
+  // === CT SPAWN (север) ===
+  wallZ(blocks, -50, -20, -30, 1, 5, 'bricks');
+  wallZ(blocks, -50, -20, 30, 1, 5, 'bricks');
+  wallX(blocks, -30, 30, -50, 1, 5, 'bricks');
+  crate(blocks, -20, -40, 2, 'planks');
+  crate(blocks, 20, -40, 2, 'planks');
+  crate(blocks, 0, -45, 2, 'planks');
 
-  // Ящики в Mid
-  crate(blocks, -8, -5, 2);
-  crate(blocks, 8, -5, 2);
-
-  // ============================================================
-  // CT SPAWN (север) — X = -30..+30, Z = -50..-20
-  // ============================================================
-  // Стены CT Spawn
-  wallZ(blocks, -50, -20, -30, 1, 5, 'bricks');   // западная
-  wallZ(blocks, -50, -20, 30, 1, 5, 'bricks');    // восточная
-  wallX(blocks, -30, 30, -50, 1, 5, 'bricks');    // задняя (север)
-
-  // Проход CT Spawn → Mid (открыт)
-  // Стены ограждают только по бокам
-
-  // Ящики в CT Spawn
-  crate(blocks, -20, -40, 2);
-  crate(blocks, 20, -40, 2);
-  crate(blocks, 0, -45, 2);
-
-  // ============================================================
-  // LONG A (справа) — X = +30..+55, Z = 0..+55
-  // ============================================================
-  // Внутренняя стена Long (отделяет от Mid)
+  // === LONG A ===
   wallZ(blocks, 0, 55, 30, 1, 5, 'bricks');
-
-  // === LONG DOORS (вход в Long из T Spawn) — Z = 50 ===
-  // Проход оставляем X = +40..+50
   wallX(blocks, 30, 39, 50, 1, 5, 'bricks');
   wallX(blocks, 51, 55, 50, 1, 5, 'bricks');
-  // Верхняя перекладина двери
   for (let x = 40; x <= 50; x++) addB(blocks, x, 5, 50, 'bricks');
-
-  // === CAR (машина в Long) — X = 35..40, Z = 30 ===
-  for (let x = 35; x <= 40; x++) {
+  // Машина
+  for (let x = 35; x <= 40; x++)
     for (let z = 28; z <= 32; z++) {
       addB(blocks, x, 1, z, 'cobble');
       addB(blocks, x, 2, z, 'cobble');
     }
-  }
+  crate(blocks, 45, 15, 2, 'planks');
+  crate(blocks, 45, 40, 2, 'planks');
+  crate(blocks, 50, 20, 2, 'planks');
 
-  // === PIT (яма в Long — небольшая ниша) ===
-  // Оставляем как нишу в стене X = 30, Z = 20..25
-  // (просто не ставим стену в этом месте)
-
-  // Ящики в Long
-  crate(blocks, 45, 15, 2);
-  crate(blocks, 45, 40, 2);
-  crate(blocks, 50, 20, 2);
-
-  // ============================================================
-  // LONG CORNER → A SITE — переход
-  // ============================================================
+  // === LONG CORNER → A ===
   wallZ(blocks, 0, 15, 30, 1, 5, 'bricks');
   wallX(blocks, 30, 55, 0, 1, 5, 'bricks');
 
-  // ============================================================
-  // A SITE (справа-верх) — X = +30..+60, Z = -50..0
-  // ============================================================
-  // Западная стена A (отделяет от CT Mid)
+  // === A SITE ===
   wallZ(blocks, -50, 0, 30, 1, 6, 'bricks');
-
-  // Северная стена A
   wallX(blocks, 30, 60, -50, 1, 6, 'bricks');
-
-  // === ГЛАВНЫЕ ЯЩИКИ НА A (платформа для бомбы) ===
-  // Большой штабель 3×2
-  crateStack(blocks, 40, -30, 2);
-  crateStack(blocks, 42, -30, 2);
-  crateStack(blocks, 44, -30, 2);
-
-  // === GOOSE (ящики для укрытия) ===
-  crate(blocks, 50, -35, 2);
-  crate(blocks, 52, -35, 2);
-
-  // === Ящики у входа на A (со стороны Catwalk) ===
-  crate(blocks, 35, -15, 2);
-  crate(blocks, 37, -15, 2);
-
-  // === Бочки на A ===
+  // Ящики-платформа
+  crate(blocks, 40, -30, 2, 'planks');
+  crate(blocks, 42, -30, 2, 'planks');
+  crate(blocks, 44, -30, 2, 'planks');
+  for (let x = 40; x <= 45; x++)
+    for (let z = -30; z <= -29; z++) {
+      addB(blocks, x, 3, z, 'planks');
+      addB(blocks, x, 4, z, 'planks');
+    }
+  crate(blocks, 50, -35, 2, 'planks');
+  crate(blocks, 52, -35, 2, 'planks');
+  crate(blocks, 35, -15, 2, 'planks');
+  crate(blocks, 37, -15, 2, 'planks');
   crate(blocks, 55, -20, 1, 'planks');
   crate(blocks, 56, -22, 1, 'planks');
 
-  // ============================================================
-  // CATWALK (мост от Mid к A) — X = +10..+30, Z = -15..0
-  // ============================================================
-  // Стены Catwalk (по бокам моста)
-  wallZ(blocks, -15, 0, 10, 1, 5, 'bricks');
-  wallZ(blocks, -15, 0, 30, 1, 5, 'bricks');
-  // Пол моста (приподнят)
-  for (let x = 10; x <= 30; x++) {
-    for (let z = -15; z <= 0; z++) {
-      addB(blocks, x, 2, z, 'planks');
-    }
-  }
-
-  // ============================================================
-  // TUNNELS (слева) — X = -55..-30, Z = 0..+40
-  // ============================================================
-  // Внешняя стена Tunnels
+  // === TUNNELS (слева) ===
   wallZ(blocks, 0, 40, -55, 1, 5, 'bricks');
-  // Внутренняя стена (отделяет от Mid)
   wallZ(blocks, 0, 40, -30, 1, 5, 'bricks');
-
-  // === UPPER TUNNELS (соединение с T Spawn) ===
   wallX(blocks, -55, -30, 40, 1, 5, 'bricks');
-  // Проход между T Spawn и Upper Tunnels — оставляем открытым (X=-30..-20, Z=40)
-
-  // === LOWER TUNNELS (соединение с B Site) ===
   wallX(blocks, -55, -30, 0, 1, 5, 'bricks');
-  // Проход между Lower Tunnels и B — оставляем открытым
+  crate(blocks, -45, 20, 2, 'planks');
+  crate(blocks, -50, 10, 2, 'planks');
+  crate(blocks, -45, 30, 2, 'planks');
 
-  // Ящики в туннелях
-  crate(blocks, -45, 20, 2);
-  crate(blocks, -50, 10, 2);
-  crate(blocks, -45, 30, 2);
-
-  // ============================================================
-  // B SITE (слева-верх) — X = -60..-30, Z = -50..0
-  // ============================================================
-  // Восточная стена B (отделяет от CT Mid)
+  // === B SITE ===
   wallZ(blocks, -50, 0, -30, 1, 6, 'bricks');
-
-  // Северная стена B
   wallX(blocks, -60, -30, -50, 1, 6, 'bricks');
-
-  // === ЯЩИКИ НА B (стандартные) ===
-  // Основные ящики для укрытия
-  crateStack(blocks, -50, -30, 2);
-  crateStack(blocks, -48, -30, 2);
-  crateStack(blocks, -46, -30, 2);
-
-  // === ЯЩИКИ У ВХОДА ===
-  crate(blocks, -40, -40, 2);
-  crate(blocks, -38, -40, 2);
-
-  // === МАШИНА НА B ===
-  for (let x = -58; x <= -52; x++) {
+  // Ящики на B
+  crate(blocks, -50, -30, 2, 'planks');
+  crate(blocks, -48, -30, 2, 'planks');
+  crate(blocks, -46, -30, 2, 'planks');
+  for (let x = -50; x <= -45; x++)
+    for (let z = -30; z <= -29; z++) {
+      addB(blocks, x, 3, z, 'planks');
+      addB(blocks, x, 4, z, 'planks');
+    }
+  crate(blocks, -40, -40, 2, 'planks');
+  crate(blocks, -38, -40, 2, 'planks');
+  // Машина на B
+  for (let x = -58; x <= -52; x++)
     for (let z = -35; z <= -30; z++) {
       addB(blocks, x, 1, z, 'cobble');
       addB(blocks, x, 2, z, 'cobble');
     }
-  }
 
-  // ============================================================
-  // ПРОХОДЫ CT → A и CT → B
-  // ============================================================
-  // Проход CT → A (справа)
+  // === ПРОХОДЫ CT → A и CT → B ===
   wallZ(blocks, -30, -20, 30, 1, 5, 'bricks');
-  // Проход CT → B (слева)
   wallZ(blocks, -30, -20, -30, 1, 5, 'bricks');
 
+  // === ДОП. ЯЩИКИ ===
+  crate(blocks, -25, 25, 2, 'planks');
+  crate(blocks, 25, 25, 2, 'planks');
+  crate(blocks, 0, -15, 2, 'planks');
+  crate(blocks, 15, -15, 2, 'planks');
+  crate(blocks, -15, -15, 2, 'planks');
+
   // ============================================================
-  // ДОПОЛНИТЕЛЬНЫЕ ЯЩИКИ И ДЕКОР
+  // ВАЖНО: УБРАЛ CATWALK (деревянную платформу)
+  // которая пересекалась с CT Spawn и спавнила синих внутри
   // ============================================================
-  crate(blocks, -25, 25, 2);   // возле T Spawn
-  crate(blocks, 25, 25, 2);
-  crate(blocks, 0, -15, 2);    // в CT Mid
-  crate(blocks, 15, -15, 2);
-  crate(blocks, -15, -15, 2);
 
   return blocks;
 }
