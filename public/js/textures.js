@@ -1,157 +1,115 @@
 // ============================================================
-// map.js — Карта de_dust2
-// Использует текстуры из textures.js
+// textures.js — Текстуры для карты Dust 2
 // ============================================================
+import * as THREE from 'three';
 
-export const HALF = 64;
-
-// Хелпер: блок
-function addB(blocks, x, y, z, type) {
-  blocks.push({ x, y, z, type });
+// ---------- Seeded RNG (одинаковые текстуры у всех) ----------
+function rng(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-// Стена вдоль X
-function wallX(blocks, x1, x2, z, y1, y2, type = 'sand') {
-  for (let x = x1; x <= x2; x++)
-    for (let y = y1; y <= y2; y++)
-      addB(blocks, x, y, z, type);
+function makeCanvas(draw, size = 16) {
+  const c = document.createElement('canvas');
+  c.width = size; c.height = size;
+  draw(c.getContext('2d'), size);
+  return c;
 }
 
-// Стена вдоль Z
-function wallZ(blocks, z1, z2, x, y1, y2, type = 'sand') {
-  for (let z = z1; z <= z2; z++)
-    for (let y = y1; y <= y2; y++)
-      addB(blocks, x, y, z, type);
+function toTexture(canvas) {
+  const t = new THREE.CanvasTexture(canvas);
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestFilter;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
-// Пол
-function floor(blocks, x1, x2, z1, z2, type = 'sand') {
-  for (let x = x1; x <= x2; x++)
-    for (let z = z1; z <= z2; z++)
-      addB(blocks, x, 0, z, type);
-}
-
-// Ящик
-function crate(blocks, x, z, size = 2, type = 'planks') {
-  for (let dx = 0; dx < size; dx++)
-    for (let dz = 0; dz < size; dz++)
-      for (let y = 1; y <= size; y++)
-        addB(blocks, x + dx, y, z + dz, type);
-}
-
-// ============================================================
-export function buildMapBlocks() {
-  const blocks = [];
-
-  // === ПОЛ ВСЕЙ КАРТЫ ===
-  floor(blocks, -64, 63, -64, 63, 'sand');
-
-  // === ПЕРИМЕТР ===
-  wallX(blocks, -64, 63, -64, 1, 5, 'bricks');
-  wallX(blocks, -64, 63, 63, 1, 5, 'bricks');
-  wallZ(blocks, -64, 63, -64, 1, 5, 'bricks');
-  wallZ(blocks, -64, 63, 63, 1, 5, 'bricks');
-
-  // === T SPAWN (внизу по центру, X=-20..10, Z=40..60) ===
-  wallX(blocks, -20, 10, 60, 1, 4, 'bricks');
-  wallZ(blocks, 40, 60, -20, 1, 4, 'bricks');
-  wallZ(blocks, 40, 60, 10, 1, 4, 'bricks');
-  crate(blocks, -15, 45, 2, 'planks');
-  crate(blocks, 5, 45, 2, 'planks');
-  crate(blocks, -5, 52, 2, 'planks');
-
-  // === ВЫХОД T SPAWN → MID ===
-  wallZ(blocks, 20, 40, -8, 1, 4, 'bricks');
-  wallZ(blocks, 20, 40, 8, 1, 4, 'bricks');
-
-  // === MID ===
-  wallZ(blocks, -10, 20, -20, 1, 4, 'bricks');
-  wallZ(blocks, -10, 20, 20, 1, 4, 'bricks');
-  // Mid Doors
-  wallX(blocks, -20, -5, 5, 1, 4, 'planks');
-  wallX(blocks, 5, 20, 5, 1, 4, 'planks');
-  // Xbox
-  crate(blocks, -1, 10, 2, 'planks');
-  crate(blocks, -15, 0, 2, 'planks');
-  crate(blocks, 15, 0, 2, 'planks');
-  crate(blocks, -12, 15, 2, 'planks');
-  crate(blocks, 12, 15, 2, 'planks');
-
-  // === CT SPAWN ===
-  wallX(blocks, -30, -10, -20, 1, 4, 'bricks');
-  wallX(blocks, 20, 30, -20, 1, 4, 'bricks');
-  wallZ(blocks, -50, -20, -30, 1, 4, 'bricks');
-  wallZ(blocks, -50, -20, 30, 1, 4, 'bricks');
-  wallX(blocks, -30, 30, -50, 1, 4, 'bricks');
-  crate(blocks, -20, -40, 2, 'planks');
-  crate(blocks, 20, -40, 2, 'planks');
-
-  // === LONG A ===
-  wallZ(blocks, 0, 55, 30, 1, 4, 'bricks');
-  wallX(blocks, 30, 40, 55, 1, 4, 'bricks');
-  wallX(blocks, 50, 55, 55, 1, 4, 'bricks');
-  crate(blocks, 35, 30, 2, 'planks');
-  crate(blocks, 45, 20, 2, 'planks');
-  crate(blocks, 50, 40, 2, 'planks');
-
-  // === A SITE ===
-  wallZ(blocks, -50, -5, 30, 1, 5, 'bricks');
-  wallX(blocks, 30, 60, -50, 1, 5, 'bricks');
-  crate(blocks, 40, -30, 2, 'planks');
-  crate(blocks, 42, -30, 2, 'planks');
-  crate(blocks, 44, -30, 2, 'planks');
-  // Сложенные
-  for (let x = 40; x <= 45; x++)
-    for (let z = -30; z <= -29; z++) {
-      addB(blocks, x, 3, z, 'planks');
-      addB(blocks, x, 4, z, 'planks');
+function noisy(g, palette, seed, size = 16) {
+  const r = rng(seed);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      g.fillStyle = palette[Math.floor(r() * palette.length)];
+      g.fillRect(x, y, 1, 1);
     }
-  crate(blocks, 50, -20, 2, 'planks');
-  crate(blocks, 35, -40, 2, 'planks');
+  }
+}
 
-  // === CATWALK ===
-  wallZ(blocks, -15, -5, 15, 1, 4, 'bricks');
-  wallZ(blocks, -15, -5, 30, 1, 4, 'bricks');
+// ---------- Палитры (в стиле Dust 2) ----------
+const SAND = ['#d9cf9e', '#d1c694', '#e0d6a8', '#c9bd88'];
+const WALL = ['#c9a878', '#b89868', '#d4b88a', '#a88050'];
+const BRICK = ['#a86a4a', '#9a5e42', '#b87858', '#8e5238'];
+const COBBLE = ['#828282', '#6b6b6b', '#909090', '#5e5e5e'];
+const PLANKS = ['#a8824e', '#9c7845', '#b08a55', '#93713f'];
+const STONE = ['#7f7f7f', '#747474', '#8a8a8a', '#6f6f6f'];
+const GRASS = ['#5d9c3a', '#549135', '#67a83f', '#4f8a31'];
+const DIRT = ['#79553a', '#6e4c33', '#82603f', '#65462f'];
 
-  // === SHORT ===
-  wallZ(blocks, 0, 5, 20, 1, 4, 'bricks');
-  wallZ(blocks, 0, 5, 30, 1, 4, 'bricks');
+// ---------- buildTextures ----------
+export function buildTextures() {
+  const tex = {};
 
-  // === TUNNELS ===
-  wallZ(blocks, -10, 40, -55, 1, 4, 'bricks');
-  wallZ(blocks, -10, 40, -30, 1, 4, 'bricks');
-  wallX(blocks, -55, -30, 40, 1, 4, 'bricks');
-  crate(blocks, -45, 20, 2, 'planks');
-  crate(blocks, -50, 0, 2, 'planks');
+  tex.sand = toTexture(makeCanvas((g, s) => noisy(g, SAND, 1, s)));
+  tex.wall = toTexture(makeCanvas((g, s) => noisy(g, WALL, 2, s)));
+  tex.stone = toTexture(makeCanvas((g, s) => noisy(g, STONE, 3, s)));
 
-  // === B SITE ===
-  wallZ(blocks, -50, -5, -30, 1, 5, 'bricks');
-  wallX(blocks, -60, -30, -50, 1, 5, 'bricks');
-  crate(blocks, -50, -30, 2, 'planks');
-  crate(blocks, -48, -30, 2, 'planks');
-  for (let x = -50; x <= -47; x++)
-    for (let z = -30; z <= -29; z++) {
-      addB(blocks, x, 3, z, 'planks');
-      addB(blocks, x, 4, z, 'planks');
+  tex.bricks = toTexture(makeCanvas((g, s) => {
+    noisy(g, BRICK, 4, s);
+    g.fillStyle = '#d3c5b5';
+    for (let y = 0; y < s; y += 4) g.fillRect(0, y + 3, s, 1);
+    for (let row = 0; row < 4; row++) {
+      for (let x = (row % 2 ? 0 : 4); x < s; x += 8) {
+        g.fillRect(x, row * 4, 1, 3);
+      }
     }
-  crate(blocks, -40, -40, 2, 'planks');
-  // Машина
-  for (let x = -58; x <= -52; x++)
-    for (let z = -35; z <= -30; z++) {
-      addB(blocks, x, 1, z, 'cobble');
-      addB(blocks, x, 2, z, 'cobble');
-    }
+  }));
 
-  // === Проходы CT → A и B ===
-  wallZ(blocks, -30, -20, -30, 1, 4, 'bricks');
-  wallZ(blocks, -30, -20, 30, 1, 4, 'bricks');
+  tex.cobble = toTexture(makeCanvas((g, s) => {
+    noisy(g, COBBLE, 5, s);
+    g.fillStyle = '#4a4a4a';
+    [[0, 5], [5, 0], [10, 6], [3, 11], [12, 12], [8, 9]].forEach(([x, y]) => {
+      g.fillRect(x, y, 5, 1);
+      g.fillRect(x, y, 1, 5);
+    });
+  }));
 
-  // === Доп. ящики ===
-  crate(blocks, -25, 25, 2, 'planks');
-  crate(blocks, 25, 25, 2, 'planks');
-  crate(blocks, 0, -15, 2, 'planks');
-  crate(blocks, 15, -15, 2, 'planks');
-  crate(blocks, -15, -15, 2, 'planks');
+  tex.planks = toTexture(makeCanvas((g, s) => {
+    noisy(g, PLANKS, 6, s);
+    g.fillStyle = '#6e5530';
+    for (let y = 3; y < s; y += 4) g.fillRect(0, y, s, 1);
+    g.fillRect(4, 0, 1, 4);
+    g.fillRect(11, 4, 1, 4);
+    g.fillRect(2, 8, 1, 4);
+    g.fillRect(13, 12, 1, 4);
+  }));
 
-  return blocks;
+  tex.grass = toTexture(makeCanvas((g, s) => noisy(g, GRASS, 7, s)));
+  tex.dirt = toTexture(makeCanvas((g, s) => noisy(g, DIRT, 8, s)));
+
+  tex.redWool = toTexture(makeCanvas((g, s) => noisy(g, ['#b03430','#a32e2a','#bd3d38','#962824'], 9, s)));
+  tex.blueWool = toTexture(makeCanvas((g, s) => noisy(g, ['#3a4fb4','#3448a6','#4458c2','#2e4096'], 10, s)));
+
+  return tex;
+}
+
+// ---------- Материалы ----------
+function mat(t) { return new THREE.MeshLambertMaterial({ map: t }); }
+
+export function buildMaterials(tex) {
+  return {
+    sand: mat(tex.sand),
+    wall: mat(tex.wall),
+    bricks: mat(tex.bricks),
+    cobble: mat(tex.cobble),
+    planks: mat(tex.planks),
+    stone: mat(tex.stone),
+    grass: mat(tex.grass),
+    dirt: mat(tex.dirt),
+    redWool: mat(tex.redWool),
+    blueWool: mat(tex.blueWool),
+  };
 }
